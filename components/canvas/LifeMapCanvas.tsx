@@ -138,16 +138,46 @@ function createInitialEdges(): Edge<LifeMapEdgeData>[] {
   ];
 }
 
+const STORAGE_KEY = 'lifemap-autosave';
+
+function loadSavedData(): { nodes: Node<LifeMapNodeData>[]; edges: Edge<LifeMapEdgeData>[] } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.nodes?.length > 0) return parsed;
+  } catch {}
+  return null;
+}
+
 function LifeMapCanvasInner() {
-  const initialEdges = useMemo(() => createInitialEdges(), []);
-  const initialNodes = useMemo(() => autoLayoutNodes(createInitialNodes(), initialEdges), [initialEdges]);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const saved = useMemo(() => loadSavedData(), []);
+  const fallbackEdges = useMemo(() => createInitialEdges(), []);
+  const fallbackNodes = useMemo(() => autoLayoutNodes(createInitialNodes(), fallbackEdges), [fallbackEdges]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(saved?.nodes ?? fallbackNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(saved?.edges ?? fallbackEdges);
   const { currentView, setSelectedNodes, clearSelection } = useViewStore();
   const { screenToFlowPosition } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const [activeRelationType, setActiveRelationType] = useState<RelationshipType>('custom');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 자동저장: 노드/엣지 변경 시 1초 디바운스로 localStorage에 저장
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus('saving');
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ nodes, edges, savedAt: new Date().toISOString() }));
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {}
+    }, 1000);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [nodes, edges]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -358,7 +388,21 @@ function LifeMapCanvasInner() {
           노드 {nodeCount}개 | 연결 {edgeCount}개
           {groupCount > 0 && ` | 그룹 ${groupCount}개`}
         </span>
-        <span>LifeMap v0.1.0</span>
+        <div className="flex items-center gap-3">
+          {saveStatus === 'saving' && (
+            <span className="flex items-center gap-1 text-amber-500">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+              저장 중...
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="flex items-center gap-1 text-green-500">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
+              저장됨
+            </span>
+          )}
+          <span>LifeMap v0.1.0</span>
+        </div>
       </footer>
     </div>
   );
