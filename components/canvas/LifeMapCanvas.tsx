@@ -39,7 +39,7 @@ import { GraphView } from '@/components/views/GraphView';
 import { useViewStore } from '@/stores/useViewStore';
 import { RELATIONSHIP_STYLES } from '@/lib/constants';
 import type { NodeType, LifeMapNodeData, LifeMapEdgeData, RelationshipType } from '@/types';
-import { useAutoSave, SaveStatusBadge } from '@/components/ui/save-status-toast';
+import { useAutoSave, SaveIndicator } from '@/components/ui/save-status-toast';
 
 import { nanoid } from 'nanoid';
 
@@ -164,8 +164,8 @@ function LifeMapCanvasInner() {
 
   const [activeRelationType, setActiveRelationType] = useState<RelationshipType>('custom');
 
-  // Toss 스타일 자동저장 (1초 디바운스 + 플로팅 토스트)
-  const { lastSavedAt } = useAutoSave({ nodes, edges });
+  // 자동저장 (1초 디바운스 + 신호등 인디케이터)
+  const { saveState } = useAutoSave({ nodes, edges });
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -390,7 +390,7 @@ function LifeMapCanvasInner() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <SaveStatusBadge lastSavedAt={lastSavedAt} />
+          <SaveIndicator state={saveState} />
           <span className="text-[#B0B8C1]">LifeMap</span>
         </div>
       </footer>
