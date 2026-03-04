@@ -68,17 +68,32 @@ function createInitialNodes(): Node<LifeMapNodeData>[] {
     } as LifeMapNodeData,
   });
 
+  // 나(전서원)를 정중앙에 배치, 타입별 직각 정렬
+  // 상: 목표 | 좌: 사람 | 우: 조직 | 하: 활동
+  const cx = 500;  // 중심 X
+  const cy = 400;  // 중심 Y
+  const gap = 220; // 노드 간격
+
   return [
-    n('n1', 'person', '나 (전서원)', 400, 300, ['core']),
-    n('n2', 'person', '멘토 M', 150, 100, ['멘토', '삼성']),
-    n('n3', 'person', 'Y', 650, 100, ['대학', '경영학과']),
-    n('n4', 'organization', '건국대학교 경영학과', 700, 300, ['학업']),
-    n('n5', 'organization', '소망교회 새움지구', 100, 500, ['신앙']),
-    n('n6', 'organization', '홍대 직장', 700, 500, ['커리어']),
-    n('n7', 'activity', '투자 분석 (제1원칙)', 50, 250, ['투자']),
-    n('n8', 'activity', '재벌 지배구조 프로젝트', 350, 550, ['코딩']),
-    n('n9', 'activity', '비즈니스 밋업', 550, 550, ['네트워킹']),
-    n('n10', 'goal', '삶의 8대 영역 균형', 400, 50, ['핵심목표']),
+    // ── 중심 ──
+    n('n1', 'person', '나 (전서원)', cx, cy, ['core']),
+
+    // ── 상단: 목표 ──
+    n('n10', 'goal', '삶의 8대 영역 균형', cx, cy - gap, ['핵심목표']),
+
+    // ── 좌측: 사람 ──
+    n('n2', 'person', '멘토 M', cx - gap, cy - gap / 2, ['멘토', '삼성']),
+    n('n3', 'person', 'Y', cx - gap, cy + gap / 2, ['대학', '경영학과']),
+
+    // ── 우측: 조직 ──
+    n('n4', 'organization', '건국대학교 경영학과', cx + gap, cy - gap / 2, ['학업']),
+    n('n5', 'organization', '소망교회 새움지구', cx + gap, cy, ['신앙']),
+    n('n6', 'organization', '홍대 직장', cx + gap, cy + gap / 2, ['커리어']),
+
+    // ── 하단: 활동 ──
+    n('n7', 'activity', '투자 분석 (제1원칙)', cx - gap, cy + gap, ['투자']),
+    n('n8', 'activity', '재벌 지배구조 프로젝트', cx, cy + gap, ['코딩']),
+    n('n9', 'activity', '비즈니스 밋업', cx + gap, cy + gap, ['네트워킹']),
   ];
 }
 

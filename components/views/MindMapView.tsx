@@ -117,11 +117,15 @@ function getLayoutedElements(
   return { nodes: layoutedNodes, edges: visibleEdges };
 }
 
-// 가장 많이 연결된 노드를 중심으로 잡기
+// "나" 노드를 우선 중심으로, 없으면 가장 많이 연결된 노드
 function findCenterNodeId(
   nodes: Node<LifeMapNodeData>[],
   edges: Edge<LifeMapEdgeData>[]
 ): string | null {
+  // "나"가 포함된 노드를 우선 찾기
+  const meNode = nodes.find((n) => n.data.label.includes('나'));
+  if (meNode) return meNode.id;
+
   const counts = new Map<string, number>();
   for (const n of nodes) counts.set(n.id, 0);
   for (const e of edges) {
@@ -131,10 +135,7 @@ function findCenterNodeId(
   let maxId: string | null = null;
   let maxCount = -1;
   for (const [id, count] of counts) {
-    if (count > maxCount) {
-      maxCount = count;
-      maxId = id;
-    }
+    if (count > maxCount) { maxCount = count; maxId = id; }
   }
   return maxId;
 }
