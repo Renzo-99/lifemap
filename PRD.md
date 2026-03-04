@@ -1,0 +1,239 @@
+# PRD.md — LifeMap 요구사항 정의서
+
+> 이 문서를 기반으로 동일한 코드 작업을 수행하면 동일한 결과물이 나올 수 있도록 설계된 기술 명세서.
+> 프로젝트 진행에 따라 지속적으로 업데이트한다.
+
+## 1. 프로젝트 개요
+
+### 1.1 정의
+**LifeMap** — 나의 삶의 관계를 정리하는 시각화 도구
+
+"피그마 스타일 무한 캔버스 위에서 내 삶의 모든 관계(사람·조직·활동·목표)를 노드와 연결선으로 시각화하고, 각 노드에 풍부한 메모를 기록하는 개인용 웹 도구"
+
+### 1.2 핵심 가치
+| 영감 출처 | 가져올 핵심 기능 |
+|-----------|-----------------|
+| Figma | 무한 캔버스, 팬/줌, 다중 선택, 미니맵 |
+| Kumu | 라벨링된 관계선, 연결선 유형, 네트워크 그래프 뷰 |
+| Heptabase | 카드형 노드 + 마크다운 메모, 화이트보드 위 자유 배치 |
+| XMind | 마인드맵 자동 레이아웃, 만다라트(Grid) 뷰 |
+| TheBrain | 노드 클릭 시 중심 재배치(Focus Mode) |
+| Miro | 도형, 프레임(영역 그룹핑), 한국어 UI |
+
+## 2. 기술 스택
+
+| 카테고리 | 기술 | 버전 |
+|---------|------|------|
+| 프레임워크 | Next.js (App Router) | ^14.2.0 |
+| UI 라이브러리 | React | ^18.3.0 |
+| 언어 | TypeScript | ^5.4.0 |
+| 스타일링 | Tailwind CSS | ^3.4.0 |
+| 캔버스/노드 그래프 | @xyflow/react (React Flow) | ^12.0.0 |
+| 마크다운 에디터 | @tiptap/react + extensions | ^2.6.0 |
+| 상태 관리 | Zustand + Immer | ^4.5.0 / ^10.0.0 |
+| 마인드맵 레이아웃 | dagre | ^0.8.5 |
+| 네트워크 그래프 | d3-force | ^3.0.0 |
+| 퍼지 검색 | fuse.js | ^7.0.0 |
+| 한글 초성 | hangul-js | ^0.2.6 |
+| ID 생성 | nanoid | ^5.0.0 |
+| 아이콘 | lucide-react | ^0.400.0 |
+| 유틸리티 | clsx, tailwind-merge, date-fns | 최신 |
+
+## 3. 데이터 모델
+
+### 3.1 Node (노드)
+```typescript
+interface Node {
+  id: string;                          // nanoid 생성
+  type: 'person' | 'organization' | 'activity' | 'goal';
+  label: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  color: string;                       // HEX
+  icon?: string;
+  avatar?: string;
+  shape: 'rounded-rect' | 'circle' | 'diamond' | 'hexagon';
+  memo: string;                        // 마크다운
+  tags: string[];
+  createdAt: string;                   // ISO 8601
+  updatedAt: string;
+  mandalart?: {
+    level: 'core' | 'sub' | 'action';
+    parentGoalId?: string;
+    gridPosition?: number;             // 0-8
+  };
+}
+```
+
+### 3.2 Edge (연결선)
+```typescript
+interface Edge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  relationshipType: 'family' | 'friend' | 'mentor' | 'colleague'
+    | 'member' | 'collaborator' | 'supports' | 'influences' | 'custom';
+  color: string;
+  thickness: 1 | 2 | 3 | 4;
+  style: 'solid' | 'dashed' | 'dotted';
+  direction: 'none' | 'forward' | 'backward' | 'both';
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### 3.3 Frame (프레임)
+```typescript
+interface Frame {
+  id: string;
+  label: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  color: string;
+  childNodeIds: string[];
+}
+```
+
+### 3.4 ViewState (뷰 상태)
+```typescript
+interface ViewState {
+  currentView: 'canvas' | 'mindmap' | 'mandalart' | 'graph';
+  canvas: { panX: number; panY: number; zoom: number; };
+  selectedNodeIds: string[];
+  focusNodeId?: string;
+  filters: {
+    nodeTypes: NodeType[];
+    tags: string[];
+    relationshipTypes: RelationshipType[];
+  };
+}
+```
+
+### 3.5 AppState (전체 앱 상태)
+```typescript
+interface AppState {
+  nodes: Record<string, Node>;
+  edges: Record<string, Edge>;
+  frames: Record<string, Frame>;
+  viewState: ViewState;
+  history: { past: Snapshot[]; future: Snapshot[]; };
+}
+```
+
+## 4. 핵심 기능 명세
+
+### 4.1 무한 캔버스 (Figma-style)
+- CSS transform 기반 div 렌더링 (@xyflow/react 사용)
+- 마우스 휠 줌 (0.1x ~ 3.0x)
+- Space + 드래그로 팬
+- 트랙패드 핀치 줌, 2핑거 팬
+- 줌 레벨 표시 (좌하단)
+- 미니맵 (우하단)
+- Shift+1 Fit to View
+- 뷰포트 밖 노드 렌더링 스킵 (가상화)
+
+### 4.2 노드 시스템
+- 4가지 타입: Person(파랑), Organization(보라), Activity(초록), Goal(오렌지)
+- 생성: 캔버스 더블클릭 / 좌측 사이드바 드래그 / 단축키 N
+- 상호작용: 클릭(선택), 더블클릭(인라인 편집), 드래그(이동), Shift+클릭(다중 선택)
+- 노드 가장자리 핸들 드래그로 연결선 생성
+
+### 4.3 연결선 시스템 (Kumu 영감)
+- 노드 핸들 드래그 또는 두 노드 선택 후 L 키
+- 9가지 관계 유형: family, friend, mentor, colleague, member, collaborator, supports, influences, custom
+- 관계 유형별 기본 스타일 (색상, 두께, 선 스타일, 방향)
+- 연결선 라벨 표시, 호버 시 툴팁
+
+### 4.4 상세 메모 패널 (Heptabase 영감)
+- 우측 슬라이드인 패널
+- @tiptap/react 마크다운 에디터
+- 지원: H1-H3, 볼드, 이탤릭, 리스트, 체크리스트, 코드블록, 인용, 링크, 이미지
+- 연결된 관계 목록 표시
+- 태그 관리
+
+### 4.5 뷰 모드 (4가지)
+1. **Canvas 뷰** (기본): 자유 배치 무한 캔버스
+2. **Mind Map 뷰**: dagre 기반 방사형 자동 레이아웃
+3. **Mandalart 뷰**: Goal 노드 3×3 → 9×9 그리드
+4. **Network Graph 뷰**: d3-force 기반, Focus Mode 지원
+
+### 4.6 검색 & 필터
+- Cmd+K 글로벌 검색 (fuse.js + hangul-js 한글 초성)
+- 노드 타입별, 태그별, 관계 유형별 필터
+
+### 4.7 단축키
+| 키 | 동작 |
+|----|------|
+| Space + Drag | 캔버스 팬 |
+| Cmd/Ctrl + 휠 | 줌 |
+| Shift + 1 | Fit to View |
+| N | 새 노드 |
+| L | 두 노드 연결 |
+| Delete | 삭제 |
+| Cmd/Ctrl + Z/Shift+Z | Undo/Redo |
+| Cmd/Ctrl + K | 검색 |
+| 1/2/3/4 | 뷰 전환 |
+
+## 5. 프로젝트 구조
+
+```
+lifemap/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+├── components/
+│   ├── canvas/          # LifeMapCanvas, MiniMap, ZoomControls
+│   ├── nodes/           # PersonNode, OrganizationNode, ActivityNode, GoalNode
+│   ├── edges/           # RelationshipEdge, EdgeLabel
+│   ├── panels/          # LeftSidebar, RightPanel, MemoEditor, ConnectionList
+│   ├── views/           # CanvasView, MindMapView, MandalartView, NetworkGraphView
+│   ├── toolbar/         # TopBar, ViewSwitcher, SearchDialog
+│   └── ui/              # Button, Input, Select, Modal, Tooltip, Badge
+├── stores/              # useMapStore, useViewStore, useHistoryStore
+├── lib/                 # storage, layouts, search, export, constants
+├── types/               # index.ts (중앙 타입 정의)
+├── hooks/               # useKeyboardShortcuts, useAutoSave, useCanvasGestures
+└── public/fonts/
+```
+
+## 6. 데이터 영속화
+- **Phase 1 (MVP)**: localStorage + Zustand persist 미들웨어 (디바운스 300ms)
+- **Phase 2**: IndexedDB (이미지, 대용량 메모)
+- **Phase 3**: 서버 동기화 (MVP 범위 밖)
+
+## 7. 구현 우선순위
+
+### Phase 1: Core Canvas (MVP)
+- Next.js 세팅 + Tailwind + Pretendard
+- React Flow 무한 캔버스
+- 4가지 커스텀 노드
+- 연결선 생성 + 관계 유형
+- 우측 상세 패널 (기본 메모)
+- localStorage 자동 저장
+- 기본 단축키
+
+### Phase 2: Rich Features
+- Tiptap 마크다운 에디터
+- 프레임, 태그, 필터, 검색
+- 연결선 커스터마이징
+- Undo/Redo, JSON 내보내기/가져오기
+
+### Phase 3: View Modes
+- Mind Map, Network Graph, Mandalart 뷰
+- Focus Mode, 뷰 전환 애니메이션
+
+### Phase 4: Polish
+- 반응형, 다크 모드, PNG/SVG 내보내기
+- 온보딩, 성능 최적화
+
+## 8. 제약사항
+- 노드 500개 이상 시 가상화 필수
+- localStorage 5MB 제한 (이미지 별도 처리)
+- 이미지 base64 1MB 이하 리사이즈
+- Chrome/Edge 120+, Safari 17+, Firefox 120+
+
+---
+*최종 수정: 2026-03-04*
