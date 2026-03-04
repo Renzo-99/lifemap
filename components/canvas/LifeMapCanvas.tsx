@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -17,6 +17,8 @@ import {
   type EdgeTypes,
   type OnSelectionChangeParams,
   ReactFlowProvider,
+  useReactFlow,
+  Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -24,170 +26,107 @@ import { PersonNode } from '@/components/nodes/PersonNode';
 import { OrganizationNode } from '@/components/nodes/OrganizationNode';
 import { ActivityNode } from '@/components/nodes/ActivityNode';
 import { GoalNode } from '@/components/nodes/GoalNode';
+import { GroupNode } from '@/components/nodes/GroupNode';
 import { RelationshipEdge } from '@/components/edges/RelationshipEdge';
 import { TopBar } from '@/components/toolbar/TopBar';
 import { LeftSidebar } from '@/components/panels/LeftSidebar';
 import { RightPanel } from '@/components/panels/RightPanel';
-import { useMapStore } from '@/stores/useMapStore';
+import { ConnectionToolbar } from '@/components/toolbar/ConnectionToolbar';
+import { MindMapView } from '@/components/views/MindMapView';
+import { MandalartView } from '@/components/views/MandalartView';
+import { GraphView } from '@/components/views/GraphView';
 import { useViewStore } from '@/stores/useViewStore';
 import { RELATIONSHIP_STYLES } from '@/lib/constants';
 import type { NodeType, LifeMapNodeData, LifeMapEdgeData, RelationshipType } from '@/types';
 
 import { nanoid } from 'nanoid';
 
-// React Flow에 커스텀 노드 타입 등록
 const nodeTypes: NodeTypes = {
   person: PersonNode,
   organization: OrganizationNode,
   activity: ActivityNode,
   goal: GoalNode,
+  group: GroupNode,
 };
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
 };
 
-// 샘플 데이터를 React Flow 노드로 변환
 function createInitialNodes(): Node<LifeMapNodeData>[] {
+  const now = new Date().toISOString();
+  const n = (id: string, type: NodeType, label: string, x: number, y: number, tags: string[] = [], icon?: string): Node<LifeMapNodeData> => ({
+    id,
+    type: type === 'goal' ? 'goal' : type,
+    position: { x, y },
+    data: {
+      id, type, label,
+      color: { person: '#3182F6', organization: '#8B5CF6', activity: '#10B981', goal: '#F97316' }[type],
+      icon: icon || { person: '👤', organization: '🏢', activity: '📋', goal: '🎯' }[type],
+      shape: type === 'goal' ? 'diamond' : 'rounded-rect',
+      memo: '', tags, createdAt: now, updatedAt: now,
+    } as LifeMapNodeData,
+  });
+
   return [
-    {
-      id: 'n1',
-      type: 'person',
-      position: { x: 400, y: 300 },
-      data: {
-        id: 'n1', type: 'person', label: '나 (전서원)', color: '#3182F6',
-        icon: '👤', shape: 'rounded-rect', memo: '', tags: ['core'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n2',
-      type: 'person',
-      position: { x: 150, y: 100 },
-      data: {
-        id: 'n2', type: 'person', label: '멘토 M', color: '#3182F6',
-        icon: '👤', shape: 'rounded-rect', memo: '', tags: ['멘토', '삼성'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n3',
-      type: 'person',
-      position: { x: 650, y: 100 },
-      data: {
-        id: 'n3', type: 'person', label: 'Y', color: '#3182F6',
-        icon: '👤', shape: 'rounded-rect', memo: '', tags: ['대학', '경영학과'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n4',
-      type: 'organization',
-      position: { x: 700, y: 300 },
-      data: {
-        id: 'n4', type: 'organization', label: '건국대학교 경영학과', color: '#8B5CF6',
-        icon: '🏢', shape: 'rounded-rect', memo: '', tags: ['학업'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n5',
-      type: 'organization',
-      position: { x: 100, y: 500 },
-      data: {
-        id: 'n5', type: 'organization', label: '소망교회 새움지구', color: '#8B5CF6',
-        icon: '🏢', shape: 'rounded-rect', memo: '', tags: ['신앙'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n6',
-      type: 'organization',
-      position: { x: 700, y: 500 },
-      data: {
-        id: 'n6', type: 'organization', label: '홍대 직장', color: '#8B5CF6',
-        icon: '🏢', shape: 'rounded-rect', memo: '', tags: ['커리어'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n7',
-      type: 'activity',
-      position: { x: 50, y: 250 },
-      data: {
-        id: 'n7', type: 'activity', label: '투자 분석 (제1원칙)', color: '#10B981',
-        icon: '📋', shape: 'rounded-rect', memo: '', tags: ['투자'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n8',
-      type: 'activity',
-      position: { x: 350, y: 550 },
-      data: {
-        id: 'n8', type: 'activity', label: '재벌 지배구조 프로젝트', color: '#10B981',
-        icon: '📋', shape: 'rounded-rect', memo: '', tags: ['코딩'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n9',
-      type: 'activity',
-      position: { x: 550, y: 550 },
-      data: {
-        id: 'n9', type: 'activity', label: '비즈니스 밋업', color: '#10B981',
-        icon: '📋', shape: 'rounded-rect', memo: '', tags: ['네트워킹'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
-    {
-      id: 'n10',
-      type: 'goal',
-      position: { x: 400, y: 100 },
-      data: {
-        id: 'n10', type: 'goal', label: '삶의 8대 영역 균형', color: '#F97316',
-        icon: '🎯', shape: 'diamond', memo: '', tags: ['핵심목표'],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      } as LifeMapNodeData,
-    },
+    n('n1', 'person', '나 (전서원)', 400, 300, ['core']),
+    n('n2', 'person', '멘토 M', 150, 100, ['멘토', '삼성']),
+    n('n3', 'person', 'Y', 650, 100, ['대학', '경영학과']),
+    n('n4', 'organization', '건국대학교 경영학과', 700, 300, ['학업']),
+    n('n5', 'organization', '소망교회 새움지구', 100, 500, ['신앙']),
+    n('n6', 'organization', '홍대 직장', 700, 500, ['커리어']),
+    n('n7', 'activity', '투자 분석 (제1원칙)', 50, 250, ['투자']),
+    n('n8', 'activity', '재벌 지배구조 프로젝트', 350, 550, ['코딩']),
+    n('n9', 'activity', '비즈니스 밋업', 550, 550, ['네트워킹']),
+    n('n10', 'goal', '삶의 8대 영역 균형', 400, 50, ['핵심목표']),
   ];
 }
 
 function createInitialEdges(): Edge<LifeMapEdgeData>[] {
   const s = RELATIONSHIP_STYLES;
   const now = new Date().toISOString();
+  const e = (id: string, src: string, tgt: string, rel: RelationshipType, label: string): Edge<LifeMapEdgeData> => ({
+    id, source: src, target: tgt, type: 'relationship',
+    data: { ...s[rel], label, relationshipType: rel, createdAt: now, updatedAt: now },
+  });
+
   return [
-    { id: 'e1', source: 'n1', target: 'n2', type: 'relationship', data: { ...s.mentor, label: '멘토', relationshipType: 'mentor' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e2', source: 'n1', target: 'n3', type: 'relationship', data: { ...s.friend, label: '대학동기', relationshipType: 'friend' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e3', source: 'n1', target: 'n4', type: 'relationship', data: { ...s.member, label: '야간 재학', relationshipType: 'member' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e4', source: 'n1', target: 'n5', type: 'relationship', data: { ...s.member, label: '교인', relationshipType: 'member' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e5', source: 'n1', target: 'n6', type: 'relationship', data: { ...s.member, label: '근무중', relationshipType: 'member' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e6', source: 'n1', target: 'n7', type: 'relationship', data: { ...s.collaborator, label: '주도', relationshipType: 'collaborator' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e7', source: 'n2', target: 'n7', type: 'relationship', data: { ...s.influences, label: '전략 조언', relationshipType: 'influences' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e8', source: 'n3', target: 'n4', type: 'relationship', data: { ...s.member, label: '동기', relationshipType: 'member' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e9', source: 'n1', target: 'n8', type: 'relationship', data: { ...s.collaborator, label: '개발중', relationshipType: 'collaborator' as RelationshipType, createdAt: now, updatedAt: now } },
-    { id: 'e10', source: 'n1', target: 'n9', type: 'relationship', data: { ...s.member, label: '참여', relationshipType: 'member' as RelationshipType, createdAt: now, updatedAt: now } },
+    e('e1', 'n1', 'n2', 'mentor', '멘토'),
+    e('e2', 'n1', 'n3', 'friend', '대학동기'),
+    e('e3', 'n1', 'n4', 'member', '야간 재학'),
+    e('e4', 'n1', 'n5', 'member', '교인'),
+    e('e5', 'n1', 'n6', 'member', '근무중'),
+    e('e6', 'n1', 'n7', 'collaborator', '주도'),
+    e('e7', 'n2', 'n7', 'influences', '전략 조언'),
+    e('e8', 'n3', 'n4', 'member', '동기'),
+    e('e9', 'n1', 'n8', 'collaborator', '개발중'),
+    e('e10', 'n1', 'n9', 'member', '참여'),
+    e('e11', 'n10', 'n1', 'influences', '핵심가치'),
+    e('e12', 'n10', 'n7', 'supports', '투자목표'),
+    e('e13', 'n10', 'n8', 'supports', '프로젝트목표'),
   ];
 }
 
 function LifeMapCanvasInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState(createInitialNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState(createInitialEdges());
-  const { setSelectedNodes, clearSelection } = useViewStore();
+  const { currentView, setSelectedNodes, clearSelection } = useViewStore();
+  const { screenToFlowPosition } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
-  // 새 연결선 생성
+  const [activeRelationType, setActiveRelationType] = useState<RelationshipType>('custom');
+
   const onConnect = useCallback(
     (params: Connection) => {
       const now = new Date().toISOString();
-      const style = RELATIONSHIP_STYLES.custom;
+      const style = RELATIONSHIP_STYLES[activeRelationType];
       const newEdge: Edge<LifeMapEdgeData> = {
         ...params,
         id: nanoid(),
         type: 'relationship',
         data: {
-          label: '관계',
-          relationshipType: 'custom' as RelationshipType,
+          label: style.label,
+          relationshipType: activeRelationType,
           color: style.color,
           thickness: style.thickness,
           style: style.style,
@@ -198,131 +137,176 @@ function LifeMapCanvasInner() {
       };
       setEdges((eds) => addEdge(newEdge, eds));
     },
-    [setEdges]
+    [setEdges, activeRelationType]
   );
 
-  // 노드 선택 변경 시
   const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
-      if (selectedNodes.length > 0) {
-        setSelectedNodes(selectedNodes.map((n) => n.id));
-      } else {
-        clearSelection();
-      }
+    ({ nodes: sel }: OnSelectionChangeParams) => {
+      if (sel.length > 0) setSelectedNodes(sel.map((n) => n.id));
+      else clearSelection();
     },
     [setSelectedNodes, clearSelection]
   );
 
-  // 캔버스 더블클릭 시 새 노드 생성
   const onDoubleClick = useCallback(
     (event: React.MouseEvent) => {
-      // React Flow의 screenToFlowPosition은 ReactFlowInstance에서 사용
-      // 여기서는 간단히 기본 person 노드 추가
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const id = nanoid();
       const now = new Date().toISOString();
-      const newNode: Node<LifeMapNodeData> = {
-        id,
-        type: 'person',
-        position: { x: event.clientX - 200, y: event.clientY - 100 },
-        data: {
-          id, type: 'person', label: '새 사람', color: '#3182F6',
-          icon: '👤', shape: 'rounded-rect', memo: '', tags: [],
-          createdAt: now, updatedAt: now,
-        } as LifeMapNodeData,
-      };
-      setNodes((nds) => [...nds, newNode]);
+      setNodes((nds) => [...nds, {
+        id, type: 'person', position,
+        data: { id, type: 'person', label: '새 사람', color: '#3182F6', icon: '👤', shape: 'rounded-rect', memo: '', tags: [], createdAt: now, updatedAt: now } as LifeMapNodeData,
+      }]);
     },
-    [setNodes]
+    [setNodes, screenToFlowPosition]
   );
 
-  // 좌측 사이드바에서 노드 추가
-  const handleAddNode = useCallback(
-    (type: NodeType) => {
-      const id = nanoid();
-      const now = new Date().toISOString();
-      const colors: Record<NodeType, string> = {
-        person: '#3182F6', organization: '#8B5CF6',
-        activity: '#10B981', goal: '#F97316',
-      };
-      const icons: Record<NodeType, string> = {
-        person: '👤', organization: '🏢',
-        activity: '📋', goal: '🎯',
-      };
-      const labels: Record<NodeType, string> = {
-        person: '새 사람', organization: '새 조직',
-        activity: '새 활동', goal: '새 목표',
-      };
-      const newNode: Node<LifeMapNodeData> = {
-        id,
-        type,
-        position: { x: 300 + Math.random() * 200, y: 200 + Math.random() * 200 },
-        data: {
-          id, type, label: labels[type], color: colors[type],
-          icon: icons[type], shape: type === 'goal' ? 'diamond' : 'rounded-rect',
-          memo: '', tags: [], createdAt: now, updatedAt: now,
-        } as LifeMapNodeData,
-      };
-      setNodes((nds) => [...nds, newNode]);
-    },
-    [setNodes]
-  );
+  const handleAddNode = useCallback((type: NodeType) => {
+    const id = nanoid();
+    const now = new Date().toISOString();
+    const cfg = {
+      person: { color: '#3182F6', icon: '👤', label: '새 사람' },
+      organization: { color: '#8B5CF6', icon: '🏢', label: '새 조직' },
+      activity: { color: '#10B981', icon: '📋', label: '새 활동' },
+      goal: { color: '#F97316', icon: '🎯', label: '새 목표' },
+    }[type];
+    setNodes((nds) => [...nds, {
+      id, type,
+      position: { x: 300 + Math.random() * 200, y: 200 + Math.random() * 200 },
+      data: { id, type, label: cfg.label, color: cfg.color, icon: cfg.icon, shape: type === 'goal' ? 'diamond' : 'rounded-rect', memo: '', tags: [], createdAt: now, updatedAt: now } as LifeMapNodeData,
+    }]);
+  }, [setNodes]);
 
-  // 노드 개수, 엣지 개수
-  const nodeCount = nodes.length;
+  const handleGroupSelected = useCallback(() => {
+    const { selectedNodeIds } = useViewStore.getState();
+    if (selectedNodeIds.length < 2) return;
+    const sel = nodes.filter((n) => selectedNodeIds.includes(n.id));
+    if (sel.length < 2) return;
+
+    const pad = 40;
+    const minX = Math.min(...sel.map((n) => n.position.x)) - pad;
+    const minY = Math.min(...sel.map((n) => n.position.y)) - pad;
+    const maxX = Math.max(...sel.map((n) => n.position.x + 160)) + pad;
+    const maxY = Math.max(...sel.map((n) => n.position.y + 80)) + pad;
+    const gid = nanoid();
+    const now = new Date().toISOString();
+
+    setNodes((nds) => {
+      const updated = nds.map((n) =>
+        selectedNodeIds.includes(n.id)
+          ? { ...n, parentId: gid, position: { x: n.position.x - minX, y: n.position.y - minY }, extent: 'parent' as const }
+          : n
+      );
+      return [{
+        id: gid, type: 'group', position: { x: minX, y: minY },
+        style: { width: maxX - minX, height: maxY - minY },
+        data: { id: gid, type: 'organization' as NodeType, label: '새 그룹', color: '#94A3B8', icon: '📁', shape: 'rounded-rect', memo: '', tags: [], createdAt: now, updatedAt: now } as LifeMapNodeData,
+      } as Node<LifeMapNodeData>, ...updated];
+    });
+  }, [nodes, setNodes]);
+
+  const handleUngroupSelected = useCallback(() => {
+    const { selectedNodeIds } = useViewStore.getState();
+    const sid = selectedNodeIds[0];
+    if (!sid) return;
+    const group = nodes.find((n) => n.id === sid);
+    if (!group || group.type !== 'group') return;
+    const gpos = group.position;
+
+    setNodes((nds) =>
+      nds.filter((n) => n.id !== sid).map((n) =>
+        n.parentId === sid
+          ? { ...n, parentId: undefined, extent: undefined, position: { x: n.position.x + gpos.x, y: n.position.y + gpos.y } }
+          : n
+      )
+    );
+  }, [nodes, setNodes]);
+
+  const nodeCount = nodes.filter((n) => n.type !== 'group').length;
   const edgeCount = edges.length;
+  const groupCount = nodes.filter((n) => n.type === 'group').length;
 
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-50">
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
-        <LeftSidebar onAddNode={handleAddNode} />
+        {/* 캔버스 뷰일 때만 사이드바 표시 */}
+        {currentView === 'canvas' && (
+          <LeftSidebar
+            onAddNode={handleAddNode}
+            onGroupSelected={handleGroupSelected}
+            onUngroupSelected={handleUngroupSelected}
+          />
+        )}
 
-        {/* 메인 캔버스 */}
+        {/* 뷰 전환 */}
         <div className="relative flex-1" ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={onSelectionChange}
-            onDoubleClick={onDoubleClick}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            fitView
-            minZoom={0.1}
-            maxZoom={3}
-            defaultEdgeOptions={{ type: 'relationship' }}
-            deleteKeyCode="Delete"
-            selectionKeyCode="Shift"
-            multiSelectionKeyCode="Shift"
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
-            <Controls
-              className="!bottom-10 !left-4 !shadow-md !border-gray-200 !rounded-lg"
-              showInteractive={false}
-            />
-            <MiniMap
-              className="!bottom-10 !right-4 !shadow-md !border-gray-200 !rounded-lg"
-              nodeColor={(n) => {
-                const data = n.data as LifeMapNodeData;
-                return data?.color || '#CBD5E1';
-              }}
-              maskColor="rgba(250, 251, 252, 0.7)"
-              pannable
-              zoomable
-            />
-          </ReactFlow>
+          {currentView === 'canvas' && (
+            <>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onSelectionChange={onSelectionChange}
+                onDoubleClick={onDoubleClick}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                fitView
+                minZoom={0.1}
+                maxZoom={3}
+                defaultEdgeOptions={{ type: 'relationship' }}
+                deleteKeyCode="Delete"
+                selectionKeyCode="Shift"
+                multiSelectionKeyCode="Shift"
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
+                <Controls className="!bottom-10 !left-4 !shadow-md !border-gray-200 !rounded-lg" showInteractive={false} />
+                <MiniMap
+                  className="!bottom-10 !right-4 !shadow-md !border-gray-200 !rounded-lg"
+                  nodeColor={(n) => (n.data as LifeMapNodeData)?.color || '#CBD5E1'}
+                  maskColor="rgba(250, 251, 252, 0.7)"
+                  pannable
+                  zoomable
+                />
+                <Panel position="top-center">
+                  <ConnectionToolbar
+                    activeRelationType={activeRelationType}
+                    onChangeRelationType={setActiveRelationType}
+                    connectMode={false}
+                    onToggleConnectMode={() => {}}
+                  />
+                </Panel>
+              </ReactFlow>
+            </>
+          )}
+
+          {currentView === 'mindmap' && (
+            <MindMapView sourceNodes={nodes} sourceEdges={edges} />
+          )}
+
+          {currentView === 'mandalart' && (
+            <MandalartView sourceNodes={nodes} sourceEdges={edges} />
+          )}
+
+          {currentView === 'graph' && (
+            <GraphView sourceNodes={nodes} sourceEdges={edges} />
+          )}
         </div>
 
-        <RightPanel flowEdges={edges} />
+        {currentView === 'canvas' && (
+          <RightPanel flowNodes={nodes} flowEdges={edges} />
+        )}
       </div>
 
-      {/* 상태 바 */}
       <footer className="flex h-7 items-center justify-between border-t border-gray-200 bg-white px-4 text-xs text-gray-400">
-        <span>노드 {nodeCount}개 | 연결 {edgeCount}개</span>
+        <span>
+          노드 {nodeCount}개 | 연결 {edgeCount}개
+          {groupCount > 0 && ` | 그룹 ${groupCount}개`}
+        </span>
         <span>LifeMap v0.1.0</span>
       </footer>
     </div>

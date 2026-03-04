@@ -1,15 +1,16 @@
 'use client';
 
 import { memo, useState, useCallback } from 'react';
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { Handle, Position, useReactFlow, type NodeProps, type Node } from '@xyflow/react';
 import type { LifeMapNodeData } from '@/types';
 import { cn } from '@/lib/utils';
 
 type PersonNodeType = Node<LifeMapNodeData, 'person'>;
 
-function PersonNodeComponent({ data, selected }: NodeProps<PersonNodeType>) {
+function PersonNodeComponent({ id, data, selected }: NodeProps<PersonNodeType>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(data.label);
+  const { updateNodeData } = useReactFlow();
 
   const handleDoubleClick = useCallback(() => {
     setIsEditing(true);
@@ -18,8 +19,10 @@ function PersonNodeComponent({ data, selected }: NodeProps<PersonNodeType>) {
 
   const handleBlur = useCallback(() => {
     setIsEditing(false);
-    // 라벨 업데이트는 부모에서 onNodeChange로 처리
-  }, []);
+    if (editLabel.trim() && editLabel !== data.label) {
+      updateNodeData(id, { label: editLabel.trim() });
+    }
+  }, [id, editLabel, data.label, updateNodeData]);
 
   return (
     <div
