@@ -19,6 +19,13 @@
 | XMind | 마인드맵 자동 레이아웃, 만다라트(Grid) 뷰 |
 | TheBrain | 노드 클릭 시 중심 재배치(Focus Mode) |
 | Miro | 도형, 프레임(영역 그룹핑), 한국어 UI |
+| **Toss/토스** | **UI/UX 디자인 철학 — 미니멀, 직관적 피드백, blue500(#3182F6) 기반 컬러, 부드러운 마이크로 인터랙션** |
+
+### 1.3 디자인 철학 (Toss Design Principles)
+1. **Simple** — 불필요한 요소를 제거하고 핵심에 집중. 여백은 곧 기능이다.
+2. **Logical** — 정보 위계를 명확하게. 색상·크기·무게감으로 시각 우선순위 전달.
+3. **Intuitive** — 설명 없이도 알 수 있는 UI. 피드백은 즉각적으로.
+4. **Korean-first** — Pretendard 폰트, 한국어 UX 라이팅, 자연스러운 한국어 메시지.
 
 ## 2. 기술 스택
 
@@ -40,6 +47,7 @@
 | 한글 초성 | hangul-js | ^0.2.6 | |
 | ID 생성 | nanoid | ^5.0.0 | |
 | 아이콘 | lucide-react | ^0.576.0 | |
+| 토스트/알림 | sonner | 최신 | Toss 스타일 플로팅 토스트 |
 | 유틸리티 | clsx, tailwind-merge, class-variance-authority, date-fns | 최신 | |
 
 ## 3. 데이터 모델
@@ -194,7 +202,7 @@ lifemap/
 │   ├── panels/          # LeftSidebar, RightPanel, MemoEditor, ConnectionList
 │   ├── views/           # CanvasView, MindMapView, MandalartView, NetworkGraphView
 │   ├── toolbar/         # TopBar, ViewSwitcher, SearchDialog
-│   └── ui/              # shadcn/ui 기반 (Button, Input, Select, Dialog, Tooltip, Badge, Tabs 등)
+│   └── ui/              # shadcn/ui 기반 (Button, Input, Select, Dialog, Tooltip, Badge, Tabs, Sonner 등)
 ├── stores/              # useMapStore, useViewStore, useHistoryStore (Zustand)
 ├── lib/
 │   ├── supabase/        # client.ts, server.ts (Supabase 클라이언트)
@@ -211,7 +219,10 @@ lifemap/
 ## 6. 데이터 영속화 & 배포
 
 ### 6.1 데이터 저장
-- **Phase 1 (MVP)**: localStorage + Zustand persist 미들웨어 (디바운스 300ms)
+- **Phase 1 (MVP)**: localStorage 자동저장 (1초 디바운스) + 새로고침 시 자동 복원
+  - **저장 피드백**: Toss 스타일 플로팅 토스트 (sonner) — 하단 중앙, 1.5초 자동 소멸
+  - **하단 상태바**: 마지막 저장 시각 표시 (HH:MM 형식)
+  - **에러 처리**: 저장 실패 시 경고 토스트 + 원인 안내
 - **Phase 2**: Supabase PostgreSQL 연동 (클라우드 저장 + 다기기 동기화)
 - **Phase 3**: Supabase Auth 연동 (사용자 인증, 개인 데이터 분리)
 

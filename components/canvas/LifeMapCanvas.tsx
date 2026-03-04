@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
+import { useCallback, useRef, useState, useMemo } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -39,6 +39,7 @@ import { GraphView } from '@/components/views/GraphView';
 import { useViewStore } from '@/stores/useViewStore';
 import { RELATIONSHIP_STYLES } from '@/lib/constants';
 import type { NodeType, LifeMapNodeData, LifeMapEdgeData, RelationshipType } from '@/types';
+import { useAutoSave, SaveStatusBadge } from '@/components/ui/save-status-toast';
 
 import { nanoid } from 'nanoid';
 
@@ -162,22 +163,9 @@ function LifeMapCanvasInner() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const [activeRelationType, setActiveRelationType] = useState<RelationshipType>('custom');
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 자동저장: 노드/엣지 변경 시 1초 디바운스로 localStorage에 저장
-  useEffect(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    setSaveStatus('saving');
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ nodes, edges, savedAt: new Date().toISOString() }));
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch {}
-    }, 1000);
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [nodes, edges]);
+  // Toss 스타일 자동저장 (1초 디바운스 + 플로팅 토스트)
+  const { lastSavedAt } = useAutoSave({ nodes, edges });
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -383,25 +371,27 @@ function LifeMapCanvasInner() {
         )}
       </div>
 
-      <footer className="flex h-7 items-center justify-between border-t border-gray-200 bg-white px-4 text-xs text-gray-400">
-        <span>
-          노드 {nodeCount}개 | 연결 {edgeCount}개
-          {groupCount > 0 && ` | 그룹 ${groupCount}개`}
-        </span>
+      <footer className="flex h-8 items-center justify-between border-t border-[#F2F4F6] bg-white px-4 text-[11px] text-[#8B95A1]">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-[#4E5968]">
+            노드 {nodeCount}
+          </span>
+          <span className="text-[#D1D6DB]">·</span>
+          <span className="font-medium text-[#4E5968]">
+            연결 {edgeCount}
+          </span>
+          {groupCount > 0 && (
+            <>
+              <span className="text-[#D1D6DB]">·</span>
+              <span className="font-medium text-[#4E5968]">
+                그룹 {groupCount}
+              </span>
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-3">
-          {saveStatus === 'saving' && (
-            <span className="flex items-center gap-1 text-amber-500">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-              저장 중...
-            </span>
-          )}
-          {saveStatus === 'saved' && (
-            <span className="flex items-center gap-1 text-green-500">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
-              저장됨
-            </span>
-          )}
-          <span>LifeMap v0.1.0</span>
+          <SaveStatusBadge lastSavedAt={lastSavedAt} />
+          <span className="text-[#B0B8C1]">LifeMap</span>
         </div>
       </footer>
     </div>
