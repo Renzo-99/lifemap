@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -21,6 +21,7 @@ import {
   Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import dagre from 'dagre';
 
 import { PersonNode } from '@/components/nodes/PersonNode';
 import { OrganizationNode } from '@/components/nodes/OrganizationNode';
@@ -53,12 +54,42 @@ const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
 };
 
+// dagre 자동 레이아웃: 노드를 겹치지 않게 자동 배치
+function autoLayoutNodes(
+  nodes: Node<LifeMapNodeData>[],
+  edges: Edge<LifeMapEdgeData>[],
+  direction: 'TB' | 'LR' = 'TB'
+): Node<LifeMapNodeData>[] {
+  const regularNds = nodes.filter((n) => n.type !== 'group');
+  if (regularNds.length === 0) return nodes;
+
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120, marginx: 60, marginy: 60 });
+
+  regularNds.forEach((node) => {
+    g.setNode(node.id, { width: 180, height: 80 });
+  });
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(g);
+
+  return nodes.map((node) => {
+    if (node.type === 'group') return node;
+    const pos = g.node(node.id);
+    if (!pos) return node;
+    return { ...node, position: { x: pos.x - 90, y: pos.y - 40 } };
+  });
+}
+
 function createInitialNodes(): Node<LifeMapNodeData>[] {
   const now = new Date().toISOString();
-  const n = (id: string, type: NodeType, label: string, x: number, y: number, tags: string[] = [], icon?: string): Node<LifeMapNodeData> => ({
+  const n = (id: string, type: NodeType, label: string, tags: string[] = [], icon?: string): Node<LifeMapNodeData> => ({
     id,
     type: type === 'goal' ? 'goal' : type,
-    position: { x, y },
+    position: { x: 0, y: 0 }, // dagre가 자동 배치
     data: {
       id, type, label,
       color: { person: '#3182F6', organization: '#8B5CF6', activity: '#10B981', goal: '#F97316' }[type],
@@ -68,32 +99,17 @@ function createInitialNodes(): Node<LifeMapNodeData>[] {
     } as LifeMapNodeData,
   });
 
-  // 나(전서원)를 정중앙에 배치, 타입별 직각 정렬
-  // 상: 목표 | 좌: 사람 | 우: 조직 | 하: 활동
-  const cx = 500;  // 중심 X
-  const cy = 400;  // 중심 Y
-  const gap = 220; // 노드 간격
-
   return [
-    // ── 중심 ──
-    n('n1', 'person', '나 (전서원)', cx, cy, ['core']),
-
-    // ── 상단: 목표 ──
-    n('n10', 'goal', '삶의 8대 영역 균형', cx, cy - gap, ['핵심목표']),
-
-    // ── 좌측: 사람 ──
-    n('n2', 'person', '멘토 M', cx - gap, cy - gap / 2, ['멘토', '삼성']),
-    n('n3', 'person', 'Y', cx - gap, cy + gap / 2, ['대학', '경영학과']),
-
-    // ── 우측: 조직 ──
-    n('n4', 'organization', '건국대학교 경영학과', cx + gap, cy - gap / 2, ['학업']),
-    n('n5', 'organization', '소망교회 새움지구', cx + gap, cy, ['신앙']),
-    n('n6', 'organization', '홍대 직장', cx + gap, cy + gap / 2, ['커리어']),
-
-    // ── 하단: 활동 ──
-    n('n7', 'activity', '투자 분석 (제1원칙)', cx - gap, cy + gap, ['투자']),
-    n('n8', 'activity', '재벌 지배구조 프로젝트', cx, cy + gap, ['코딩']),
-    n('n9', 'activity', '비즈니스 밋업', cx + gap, cy + gap, ['네트워킹']),
+    n('n1', 'person', '나 (전서원)', ['core']),
+    n('n10', 'goal', '삶의 8대 영역 균형', ['핵심목표']),
+    n('n2', 'person', '멘토 M', ['멘토', '삼성']),
+    n('n3', 'person', 'Y', ['대학', '경영학과']),
+    n('n4', 'organization', '건국대학교 경영학과', ['학업']),
+    n('n5', 'organization', '소망교회 새움지구', ['신앙']),
+    n('n6', 'organization', '홍대 직장', ['커리어']),
+    n('n7', 'activity', '투자 분석 (제1원칙)', ['투자']),
+    n('n8', 'activity', '재벌 지배구조 프로젝트', ['코딩']),
+    n('n9', 'activity', '비즈니스 밋업', ['네트워킹']),
   ];
 }
 
@@ -123,8 +139,10 @@ function createInitialEdges(): Edge<LifeMapEdgeData>[] {
 }
 
 function LifeMapCanvasInner() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(createInitialNodes());
-  const [edges, setEdges, onEdgesChange] = useEdgesState(createInitialEdges());
+  const initialEdges = useMemo(() => createInitialEdges(), []);
+  const initialNodes = useMemo(() => autoLayoutNodes(createInitialNodes(), initialEdges), [initialEdges]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { currentView, setSelectedNodes, clearSelection } = useViewStore();
   const { screenToFlowPosition } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -237,6 +255,11 @@ function LifeMapCanvasInner() {
     );
   }, [nodes, setNodes]);
 
+  // 자동 정렬 (dagre)
+  const handleAutoLayout = useCallback(() => {
+    setNodes((nds) => autoLayoutNodes(nds, edges));
+  }, [edges, setNodes]);
+
   const nodeCount = nodes.filter((n) => n.type !== 'group').length;
   const edgeCount = edges.length;
   const groupCount = nodes.filter((n) => n.type === 'group').length;
@@ -288,12 +311,20 @@ function LifeMapCanvasInner() {
                   zoomable
                 />
                 <Panel position="top-center">
-                  <ConnectionToolbar
-                    activeRelationType={activeRelationType}
-                    onChangeRelationType={setActiveRelationType}
-                    connectMode={false}
-                    onToggleConnectMode={() => {}}
-                  />
+                  <div className="flex items-center gap-2">
+                    <ConnectionToolbar
+                      activeRelationType={activeRelationType}
+                      onChangeRelationType={setActiveRelationType}
+                      connectMode={false}
+                      onToggleConnectMode={() => {}}
+                    />
+                    <button
+                      onClick={handleAutoLayout}
+                      className="rounded-lg border border-gray-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm backdrop-blur-sm transition-colors hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      자동 정렬
+                    </button>
+                  </div>
                 </Panel>
               </ReactFlow>
             </>
