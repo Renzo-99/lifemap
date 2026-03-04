@@ -300,7 +300,12 @@ function LifeMapCanvasInner() {
           )}
 
           {currentView === 'mindmap' && (
-            <MindMapView sourceNodes={nodes} sourceEdges={edges} />
+            <MindMapView
+              sourceNodes={nodes}
+              sourceEdges={edges}
+              onNodesChange={setNodes}
+              onEdgesChange={setEdges}
+            />
           )}
 
           {currentView === 'mandalart' && (
