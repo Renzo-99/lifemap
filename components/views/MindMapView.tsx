@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -16,113 +16,38 @@ import {
   type EdgeTypes,
 } from '@xyflow/react';
 import dagre from 'dagre';
-import { PersonNode } from '@/components/nodes/PersonNode';
-import { OrganizationNode } from '@/components/nodes/OrganizationNode';
-import { ActivityNode } from '@/components/nodes/ActivityNode';
-import { GoalNode } from '@/components/nodes/GoalNode';
+import { nanoid } from 'nanoid';
+import { MindMapNode } from '@/components/nodes/MindMapNode';
 import { RelationshipEdge } from '@/components/edges/RelationshipEdge';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 import { cn } from '@/lib/utils';
 
 const nodeTypes: NodeTypes = {
-  person: PersonNode,
-  organization: OrganizationNode,
-  activity: ActivityNode,
-  goal: GoalNode,
+  mindmap: MindMapNode,
 };
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
 };
 
+// 분기 색상 팔레트
+const BRANCH_COLORS = [
+  '#3182F6', '#8B5CF6', '#10B981', '#F97316', '#EF4444',
+  '#EC4899', '#06B6D4', '#84CC16', '#F59E0B', '#6366F1',
+];
+
 interface MindMapViewProps {
   sourceNodes: Node<LifeMapNodeData>[];
   sourceEdges: Edge<LifeMapEdgeData>[];
+  onNodesChange: React.Dispatch<React.SetStateAction<Node<LifeMapNodeData>[]>>;
+  onEdgesChange: React.Dispatch<React.SetStateAction<Edge<LifeMapEdgeData>[]>>;
 }
 
-function getLayoutedElements(
-  nodes: Node<LifeMapNodeData>[],
-  edges: Edge<LifeMapEdgeData>[],
-  direction: 'LR' | 'TB' | 'RL' = 'LR',
-  collapsedIds: Set<string>
-) {
-  // BFS로 중심 노드에서 도달 가능한 노드만 (접힌 노드의 자식 제외)
-  const adjacency = new Map<string, Set<string>>();
-  for (const e of edges) {
-    if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
-    if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
-    adjacency.get(e.source)!.add(e.target);
-    adjacency.get(e.target)!.add(e.source);
-  }
-
-  // 접힌 노드 아래의 노드 숨기기
-  const visibleIds = new Set<string>();
-  const queue: string[] = [];
-  const nodeIds = new Set(nodes.map((n) => n.id));
-
-  // 모든 노드에서 시작 (연결 안 된 노드도 표시)
-  for (const n of nodes) {
-    if (!visibleIds.has(n.id)) {
-      queue.push(n.id);
-      visibleIds.add(n.id);
-    }
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (collapsedIds.has(current)) continue; // 접힌 노드의 자식으로 진행하지 않음
-      const neighbors = adjacency.get(current) || new Set();
-      for (const neighbor of neighbors) {
-        if (!visibleIds.has(neighbor) && nodeIds.has(neighbor)) {
-          visibleIds.add(neighbor);
-          queue.push(neighbor);
-        }
-      }
-    }
-  }
-
-  const visibleNodes = nodes.filter((n) => visibleIds.has(n.id));
-  const visibleEdges = edges.filter(
-    (e) => visibleIds.has(e.source) && visibleIds.has(e.target)
-  );
-
-  // dagre 레이아웃
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 50, ranksep: 120, marginx: 40, marginy: 40 });
-
-  visibleNodes.forEach((node) => {
-    g.setNode(node.id, { width: 160, height: 80 });
-  });
-  visibleEdges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
-
-  dagre.layout(g);
-
-  const layoutedNodes = visibleNodes.map((node) => {
-    const pos = g.node(node.id);
-    // 접힌 노드에 표시 추가
-    const hasChildren = (adjacency.get(node.id)?.size || 0) > 0;
-    const isCollapsed = collapsedIds.has(node.id);
-    return {
-      ...node,
-      position: { x: pos.x - 80, y: pos.y - 40 },
-      data: {
-        ...node.data,
-        _hasChildren: hasChildren,
-        _isCollapsed: isCollapsed,
-      } as LifeMapNodeData,
-    };
-  });
-
-  return { nodes: layoutedNodes, edges: visibleEdges };
-}
-
-// "나" 노드를 우선 중심으로, 없으면 가장 많이 연결된 노드
+// "나" 노드를 우선 중심으로
 function findCenterNodeId(
   nodes: Node<LifeMapNodeData>[],
   edges: Edge<LifeMapEdgeData>[]
 ): string | null {
-  // "나"가 포함된 노드를 우선 찾기
   const meNode = nodes.find((n) => n.data.label.includes('나'));
   if (meNode) return meNode.id;
 
@@ -140,7 +65,161 @@ function findCenterNodeId(
   return maxId;
 }
 
-export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
+// BFS로 depth 계산 + 방향 정리
+function buildTree(
+  nodes: Node<LifeMapNodeData>[],
+  edges: Edge<LifeMapEdgeData>[],
+  centerId: string
+) {
+  const adjacency = new Map<string, Set<string>>();
+  for (const e of edges) {
+    if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
+    if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
+    adjacency.get(e.source)!.add(e.target);
+    adjacency.get(e.target)!.add(e.source);
+  }
+
+  const depthMap = new Map<string, number>();
+  const parentMap = new Map<string, string>();
+  const childrenMap = new Map<string, string[]>();
+  const visited = new Set<string>();
+  const queue: string[] = [centerId];
+  visited.add(centerId);
+  depthMap.set(centerId, 0);
+
+  // BFS로 방향 정리 (center → 바깥)
+  const directedEdges: Edge<LifeMapEdgeData>[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const neighbors = adjacency.get(current) || new Set();
+    for (const neighbor of neighbors) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+        depthMap.set(neighbor, (depthMap.get(current) || 0) + 1);
+        parentMap.set(neighbor, current);
+        if (!childrenMap.has(current)) childrenMap.set(current, []);
+        childrenMap.get(current)!.push(neighbor);
+
+        // 대응하는 엣지 찾기
+        const edge = edges.find(
+          (e) => (e.source === current && e.target === neighbor) ||
+                 (e.source === neighbor && e.target === current)
+        );
+        if (edge) {
+          directedEdges.push({
+            ...edge,
+            source: current,
+            target: neighbor,
+          });
+        }
+      }
+    }
+  }
+
+  // 방문 안 된 엣지도 포함
+  for (const e of edges) {
+    if (!directedEdges.find((d) => d.id === e.id)) {
+      directedEdges.push(e);
+    }
+  }
+
+  return { depthMap, parentMap, childrenMap, directedEdges };
+}
+
+function getLayoutedElements(
+  nodes: Node<LifeMapNodeData>[],
+  edges: Edge<LifeMapEdgeData>[],
+  centerId: string,
+  direction: 'LR' | 'TB' | 'RL',
+  collapsedIds: Set<string>
+) {
+  const { depthMap, parentMap, childrenMap, directedEdges } = buildTree(nodes, edges, centerId);
+
+  // 접힌 노드의 자식들 감추기
+  const hiddenIds = new Set<string>();
+  function hideChildren(nodeId: string) {
+    const children = childrenMap.get(nodeId) || [];
+    for (const child of children) {
+      hiddenIds.add(child);
+      hideChildren(child);
+    }
+  }
+  for (const cid of collapsedIds) {
+    hideChildren(cid);
+  }
+
+  const visibleNodes = nodes.filter((n) => !hiddenIds.has(n.id));
+  const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
+  const visibleEdges = directedEdges.filter(
+    (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+  );
+
+  // dagre 레이아웃
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 100, marginx: 40, marginy: 40 });
+
+  visibleNodes.forEach((node) => {
+    const depth = depthMap.get(node.id) || 0;
+    const w = depth === 0 ? 160 : depth === 1 ? 140 : 120;
+    const h = depth === 0 ? 50 : depth === 1 ? 40 : 32;
+    g.setNode(node.id, { width: w, height: h });
+  });
+  visibleEdges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(g);
+
+  // 1차 가지별 색상 할당
+  const branchColorMap = new Map<string, string>();
+  const centerChildren = childrenMap.get(centerId) || [];
+  centerChildren.forEach((childId, i) => {
+    branchColorMap.set(childId, BRANCH_COLORS[i % BRANCH_COLORS.length]);
+  });
+
+  // 각 노드가 어느 1차 가지에 속하는지 (재귀적)
+  function getBranchColor(nodeId: string): string {
+    if (nodeId === centerId) return BRANCH_COLORS[0];
+    if (branchColorMap.has(nodeId)) return branchColorMap.get(nodeId)!;
+    const parent = parentMap.get(nodeId);
+    if (parent) {
+      const color = getBranchColor(parent);
+      branchColorMap.set(nodeId, color);
+      return color;
+    }
+    return '#6B7280';
+  }
+
+  const layoutedNodes: Node<LifeMapNodeData>[] = visibleNodes.map((node) => {
+    const pos = g.node(node.id);
+    const depth = depthMap.get(node.id) || 0;
+    const isCenter = node.id === centerId;
+    const isCollapsed = collapsedIds.has(node.id);
+    const childCount = childrenMap.get(node.id)?.length || 0;
+    const color = getBranchColor(node.id);
+
+    return {
+      ...node,
+      type: 'mindmap',
+      position: { x: pos.x - (pos.width || 160) / 2, y: pos.y - (pos.height || 50) / 2 },
+      data: {
+        ...node.data,
+        color,
+        _isCenter: isCenter,
+        _isCollapsed: isCollapsed,
+        _childCount: childCount,
+        _depth: depth,
+      } as LifeMapNodeData,
+    };
+  });
+
+  return { nodes: layoutedNodes, edges: visibleEdges };
+}
+
+export function MindMapView({ sourceNodes, sourceEdges, onNodesChange: syncNodes, onEdgesChange: syncEdges }: MindMapViewProps) {
   const regularNodes = useMemo(
     () => sourceNodes
       .filter((n) => n.type !== 'group')
@@ -151,6 +230,7 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
   const [direction, setDirection] = useState<'LR' | 'TB' | 'RL'>('LR');
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // 초기 중심 노드
   useEffect(() => {
@@ -159,57 +239,122 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
     }
   }, [regularNodes, sourceEdges, centerNodeId]);
 
-  // 중심 노드에서 방사형 정렬: 중심 -> 1차 연결 -> 2차 연결 순서로 edge 방향 정리
-  const directedEdges = useMemo(() => {
-    if (!centerNodeId) return sourceEdges;
-    const visited = new Set<string>();
-    const queue: string[] = [centerNodeId];
-    visited.add(centerNodeId);
-    const directed: Edge<LifeMapEdgeData>[] = [];
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      for (const edge of sourceEdges) {
-        let neighbor: string | null = null;
-        if (edge.source === current && !visited.has(edge.target)) {
-          neighbor = edge.target;
-          directed.push(edge); // 이미 올바른 방향
-        } else if (edge.target === current && !visited.has(edge.source)) {
-          neighbor = edge.source;
-          // 방향 뒤집기 (중심에서 밖으로)
-          directed.push({ ...edge, source: current, target: neighbor });
-        }
-        if (neighbor) {
-          visited.add(neighbor);
-          queue.push(neighbor);
-        }
-      }
-    }
-    // 방문 안 된 edge도 포함
-    for (const e of sourceEdges) {
-      if (!directed.find((d) => d.id === e.id)) {
-        directed.push(e);
-      }
-    }
-    return directed;
-  }, [sourceEdges, centerNodeId]);
-
-  const { nodes: layoutedNodes, edges: layoutedEdges } = useMemo(
-    () => getLayoutedElements(regularNodes, directedEdges, direction, collapsedIds),
-    [regularNodes, directedEdges, direction, collapsedIds]
-  );
+  const { nodes: layoutedNodes, edges: layoutedEdges } = useMemo(() => {
+    if (!centerNodeId) return { nodes: [], edges: [] };
+    return getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
-  const [edges, , onEdgesChange] = useEdgesState(layoutedEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
+  // 레이아웃 변경 시 동기화
   useEffect(() => {
-    const result = getLayoutedElements(regularNodes, directedEdges, direction, collapsedIds);
+    if (!centerNodeId) return;
+    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
     setNodes(result.nodes);
-  }, [regularNodes, directedEdges, direction, collapsedIds, setNodes]);
+    setEdges(result.edges);
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]);
+
+  // 자식 추가 (Tab)
+  const addChild = useCallback((parentId: string) => {
+    const id = nanoid();
+    const now = new Date().toISOString();
+    const newNode: Node<LifeMapNodeData> = {
+      id,
+      type: 'person',
+      position: { x: 0, y: 0 },
+      data: {
+        id, type: 'person', label: '새 항목',
+        color: '#3182F6', icon: '📌', shape: 'rounded-rect',
+        memo: '', tags: [], createdAt: now, updatedAt: now,
+      } as LifeMapNodeData,
+    };
+    const newEdge: Edge<LifeMapEdgeData> = {
+      id: nanoid(),
+      source: parentId,
+      target: id,
+      type: 'relationship',
+      data: {
+        label: '',
+        relationshipType: 'custom',
+        color: '#6B7280',
+        thickness: 1,
+        style: 'solid',
+        direction: 'none',
+        createdAt: now,
+        updatedAt: now,
+      },
+    };
+
+    syncNodes((prev) => [...prev, newNode]);
+    syncEdges((prev) => [...prev, newEdge]);
+    setSelectedNodeId(id);
+
+    // 접힌 상태면 펼치기
+    setCollapsedIds((prev) => {
+      if (prev.has(parentId)) {
+        const next = new Set(prev);
+        next.delete(parentId);
+        return next;
+      }
+      return prev;
+    });
+  }, [syncNodes, syncEdges]);
+
+  // 형제 추가 (Enter)
+  const addSibling = useCallback((nodeId: string) => {
+    if (!centerNodeId) return;
+    const { parentMap } = buildTree(regularNodes, sourceEdges, centerNodeId);
+    const parentId = parentMap.get(nodeId);
+    if (!parentId) return; // 중심 노드는 형제 추가 불가
+    addChild(parentId);
+  }, [regularNodes, sourceEdges, centerNodeId, addChild]);
+
+  // 노드 삭제 (Delete) — 자식도 함께
+  const deleteNode = useCallback((nodeId: string) => {
+    if (!centerNodeId || nodeId === centerNodeId) return;
+    const { childrenMap } = buildTree(regularNodes, sourceEdges, centerNodeId);
+
+    const toDelete = new Set<string>();
+    function collect(nid: string) {
+      toDelete.add(nid);
+      const children = childrenMap.get(nid) || [];
+      for (const child of children) collect(child);
+    }
+    collect(nodeId);
+
+    syncNodes((prev) => prev.filter((n) => !toDelete.has(n.id)));
+    syncEdges((prev) => prev.filter((e) => !toDelete.has(e.source) && !toDelete.has(e.target)));
+    setSelectedNodeId(null);
+  }, [regularNodes, sourceEdges, centerNodeId, syncNodes, syncEdges]);
+
+  // 키보드 이벤트
+  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!selectedNodeId) return;
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      addChild(selectedNodeId);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      addSibling(selectedNodeId);
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteNode(selectedNodeId);
+    }
+  }, [selectedNodeId, addChild, addSibling, deleteNode]);
+
+  // 노드 클릭으로 선택
+  const onNodeClick = useCallback(
+    (_evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
+      setSelectedNodeId(node.id);
+    },
+    []
+  );
 
   // 노드 더블클릭으로 접기/펼치기
   const onNodeDoubleClick = useCallback(
-    (_: React.MouseEvent, node: Node<LifeMapNodeData>) => {
+    (_evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
       setCollapsedIds((prev) => {
         const next = new Set(prev);
         if (next.has(node.id)) next.delete(node.id);
@@ -220,30 +365,31 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
     []
   );
 
-  // 노드 클릭 시 중심 변경
-  const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node<LifeMapNodeData>) => {
-      setCenterNodeId(node.id);
-    },
-    []
-  );
+  // 자동 레이아웃 (수동 이동 후 재정렬)
+  const autoLayout = useCallback(() => {
+    if (!centerNodeId) return;
+    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
+    setNodes(result.nodes);
+    setEdges(result.edges);
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]);
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full" onKeyDown={onKeyDown} tabIndex={0}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeDoubleClick={onNodeDoubleClick}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={3}
         proOptions={{ hideAttribution: true }}
-        nodesDraggable={false}
+        nodesDraggable={true}
+        deleteKeyCode={null}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
         <Controls className="!bottom-4 !left-4" showInteractive={false} />
@@ -254,6 +400,7 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
           zoomable
         />
 
+        {/* 상단 컨트롤 */}
         <Panel position="top-center">
           <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg border border-gray-200 backdrop-blur-sm">
             <span className="text-[10px] font-medium text-gray-400">레이아웃:</span>
@@ -271,10 +418,16 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
                 {dir === 'LR' ? '좌→우' : dir === 'TB' ? '위→아래' : '우→좌'}
               </button>
             ))}
+
             <div className="mx-1 h-4 w-px bg-gray-200" />
-            <span className="text-[10px] text-gray-400">
-              클릭: 중심 변경 | 더블클릭: 접기/펼치기
-            </span>
+
+            <button
+              onClick={autoLayout}
+              className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-200 transition-all"
+            >
+              자동 정렬
+            </button>
+
             {collapsedIds.size > 0 && (
               <button
                 onClick={() => setCollapsedIds(new Set())}
@@ -286,12 +439,20 @@ export function MindMapView({ sourceNodes, sourceEdges }: MindMapViewProps) {
           </div>
         </Panel>
 
+        {/* 단축키 안내 + 중심 노드 표시 */}
         <Panel position="top-left">
-          {centerNodeId && (
-            <div className="mt-2 ml-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-700 border border-blue-200">
-              중심: {regularNodes.find((n) => n.id === centerNodeId)?.data.label || centerNodeId}
+          <div className="mt-2 ml-2 flex flex-col gap-1.5">
+            {centerNodeId && (
+              <div className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-700 border border-blue-200">
+                중심: {regularNodes.find((n) => n.id === centerNodeId)?.data.label || centerNodeId}
+              </div>
+            )}
+            <div className="rounded-lg bg-gray-50 px-3 py-1.5 text-[10px] text-gray-500 border border-gray-200 leading-relaxed">
+              <span className="font-semibold">Tab</span> 자식 추가 · <span className="font-semibold">Enter</span> 형제 추가 · <span className="font-semibold">Delete</span> 삭제
+              <br />
+              <span className="font-semibold">클릭</span> 선택 · <span className="font-semibold">더블클릭</span> 접기/펼치기 · <span className="font-semibold">드래그</span> 이동
             </div>
-          )}
+          </div>
         </Panel>
       </ReactFlow>
     </div>
