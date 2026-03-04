@@ -32,6 +32,23 @@
 - 타입 정의는 `types/index.ts`에 중앙 관리
 - 상수는 `lib/constants.ts`에 중앙 관리
 - 유틸 함수는 `lib/` 하위에 목적별 파일로 분리
+- Supabase 클라이언트는 `lib/supabase/` 하위에 client.ts(브라우저), server.ts(서버) 분리
+- UI 컴포넌트는 `components/ui/`에 shadcn/ui 규격으로 관리
+
+### 2.4 shadcn/ui 사용 규칙
+- UI 컴포넌트는 shadcn/ui 패턴을 따름 (Radix UI + cva + cn 유틸)
+- 새 UI 컴포넌트 추가 시 `components/ui/`에 생성하고 DESIGN.md 업데이트
+- shadcn/ui 기본 스타일을 최대한 유지, 커스터마이징은 className으로
+
+### 2.5 Supabase 사용 규칙
+- 브라우저 환경: `lib/supabase/client.ts`의 `createClient()` 사용
+- 서버 환경 (Server Component, Route Handler): `lib/supabase/server.ts`의 `createClient()` 사용
+- 환경 변수는 `.env.local`에 저장, `.env.local.example` 참고
+- `.env.local`은 절대 커밋하지 않음
+
+### 2.6 배포
+- Vercel 자동 배포 (GitHub main 브랜치 push 시)
+- 환경 변수는 Vercel Dashboard에서 별도 설정
 
 ## 3. 구현 원칙
 
@@ -62,13 +79,15 @@
 
 - 커밋 메시지: 한국어, 명확한 변경 내용 기술
 - 브랜치 전략: `main` → `feature/기능명` → PR
-- 불필요한 파일 커밋 금지 (.env, node_modules 등)
+- 불필요한 파일 커밋 금지 (.env, .env.local, node_modules, .next 등)
+- GitHub 연동: `gh` CLI 활용, Vercel 자동 배포와 연계
 
 ## 6. 알려진 문제 패턴
 
 > 프로젝트 진행 중 발견된 오류 패턴과 해결 방법을 기록한다.
 
-_(아직 없음 — 프로젝트 진행에 따라 업데이트)_
+- **React Flow 타입 호환**: `LifeMapNodeData`, `LifeMapEdgeData`는 `interface`가 아닌 `type`으로 정의하고 `[key: string]: unknown` 인덱스 시그니처를 포함해야 React Flow의 `Record<string, unknown>` 제약을 만족함
+- **shadcn/ui 레지스트리 접근 불가 시**: `npx shadcn@latest add` 대신 공식 문서에서 코드를 복사하여 `components/ui/`에 수동 생성
 
 ---
-*최종 수정: 2026-03-04*
+*최종 수정: 2026-03-04 (Supabase + shadcn/ui + Vercel 스택 반영)*

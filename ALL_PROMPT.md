@@ -19,4 +19,10 @@
 
 + LifeMap PRD & Technical Specification v1.0 전체 내용 첨부
 ```
+
+**#2**
+```
+/sc:document "Next.js, Vercel, Supabase 기반으로 개발해줘. UI/UX 디자인은 shadCN-ui와 같은 컴포넌트 패키지를 적극적으로 활용해줘. 이 내용을 PRD.md 를 포함한 업데이트가 필요한 .md 파일에 모두 업데이트해줘."
++ github은 알아서 연동해줘.
++ SuperClaude 워크플로우 가이드 (document/analyze/implement/troubleshoot/test/cleanup/git/build/improve/load 명령어 예시 전체)
 ```

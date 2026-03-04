@@ -22,22 +22,25 @@
 
 ## 2. 기술 스택
 
-| 카테고리 | 기술 | 버전 |
-|---------|------|------|
-| 프레임워크 | Next.js (App Router) | ^14.2.0 |
-| UI 라이브러리 | React | ^18.3.0 |
-| 언어 | TypeScript | ^5.4.0 |
-| 스타일링 | Tailwind CSS | ^3.4.0 |
-| 캔버스/노드 그래프 | @xyflow/react (React Flow) | ^12.0.0 |
-| 마크다운 에디터 | @tiptap/react + extensions | ^2.6.0 |
-| 상태 관리 | Zustand + Immer | ^4.5.0 / ^10.0.0 |
-| 마인드맵 레이아웃 | dagre | ^0.8.5 |
-| 네트워크 그래프 | d3-force | ^3.0.0 |
-| 퍼지 검색 | fuse.js | ^7.0.0 |
-| 한글 초성 | hangul-js | ^0.2.6 |
-| ID 생성 | nanoid | ^5.0.0 |
-| 아이콘 | lucide-react | ^0.400.0 |
-| 유틸리티 | clsx, tailwind-merge, date-fns | 최신 |
+| 카테고리 | 기술 | 버전 | 비고 |
+|---------|------|------|------|
+| 프레임워크 | Next.js (App Router) | 16.x | Turbopack 기반 |
+| UI 라이브러리 | React | 19.x | |
+| 언어 | TypeScript | ^5 | |
+| 스타일링 | Tailwind CSS | v4 | CSS-first 설정 |
+| UI 컴포넌트 | shadcn/ui (Radix UI 기반) | 최신 | New York 스타일 |
+| 백엔드/DB | Supabase (PostgreSQL) | 최신 | @supabase/ssr 사용 |
+| 배포 | Vercel | - | GitHub 연동 자동 배포 |
+| 캔버스/노드 그래프 | @xyflow/react (React Flow) | ^12.10.0 | |
+| 마크다운 에디터 | @tiptap/react + extensions | ^3.20.0 | |
+| 상태 관리 | Zustand + Immer | ^5 / ^11 | persist 미들웨어 |
+| 마인드맵 레이아웃 | dagre | ^0.8.5 | |
+| 네트워크 그래프 | d3-force | ^3.0.0 | |
+| 퍼지 검색 | fuse.js | ^7.0.0 | |
+| 한글 초성 | hangul-js | ^0.2.6 | |
+| ID 생성 | nanoid | ^5.0.0 | |
+| 아이콘 | lucide-react | ^0.576.0 | |
+| 유틸리티 | clsx, tailwind-merge, class-variance-authority, date-fns | 최신 | |
 
 ## 3. 데이터 모델
 
@@ -191,18 +194,36 @@ lifemap/
 │   ├── panels/          # LeftSidebar, RightPanel, MemoEditor, ConnectionList
 │   ├── views/           # CanvasView, MindMapView, MandalartView, NetworkGraphView
 │   ├── toolbar/         # TopBar, ViewSwitcher, SearchDialog
-│   └── ui/              # Button, Input, Select, Modal, Tooltip, Badge
-├── stores/              # useMapStore, useViewStore, useHistoryStore
-├── lib/                 # storage, layouts, search, export, constants
+│   └── ui/              # shadcn/ui 기반 (Button, Input, Select, Dialog, Tooltip, Badge, Tabs 등)
+├── stores/              # useMapStore, useViewStore, useHistoryStore (Zustand)
+├── lib/
+│   ├── supabase/        # client.ts, server.ts (Supabase 클라이언트)
+│   ├── constants.ts     # 상수값
+│   ├── utils.ts         # cn() 등 유틸리티
+│   ├── layouts.ts       # dagre, d3-force 레이아웃
+│   ├── search.ts        # fuse.js + hangul-js 검색
+│   └── export.ts        # JSON/PNG/SVG 내보내기
 ├── types/               # index.ts (중앙 타입 정의)
 ├── hooks/               # useKeyboardShortcuts, useAutoSave, useCanvasGestures
 └── public/fonts/
 ```
 
-## 6. 데이터 영속화
+## 6. 데이터 영속화 & 배포
+
+### 6.1 데이터 저장
 - **Phase 1 (MVP)**: localStorage + Zustand persist 미들웨어 (디바운스 300ms)
-- **Phase 2**: IndexedDB (이미지, 대용량 메모)
-- **Phase 3**: 서버 동기화 (MVP 범위 밖)
+- **Phase 2**: Supabase PostgreSQL 연동 (클라우드 저장 + 다기기 동기화)
+- **Phase 3**: Supabase Auth 연동 (사용자 인증, 개인 데이터 분리)
+
+### 6.2 Supabase 구성
+- **클라이언트**: `@supabase/ssr` 사용 (SSR/클라이언트 겸용)
+- **브라우저**: `lib/supabase/client.ts` — `createBrowserClient()`
+- **서버**: `lib/supabase/server.ts` — `createServerClient()`
+- **환경 변수**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+### 6.3 배포
+- **Vercel** 배포 (GitHub 연동 자동 CI/CD)
+- Vercel 환경 변수에 Supabase 키 설정
 
 ## 7. 구현 우선순위
 
@@ -231,9 +252,9 @@ lifemap/
 
 ## 8. 제약사항
 - 노드 500개 이상 시 가상화 필수
-- localStorage 5MB 제한 (이미지 별도 처리)
-- 이미지 base64 1MB 이하 리사이즈
+- localStorage 5MB 제한 → Supabase 연동 후 해소
+- 이미지 base64 1MB 이하 리사이즈 (Supabase Storage 연동 시 해소)
 - Chrome/Edge 120+, Safari 17+, Firefox 120+
 
 ---
-*최종 수정: 2026-03-04*
+*최종 수정: 2026-03-04 (Supabase + shadcn/ui + Vercel 스택 반영)*
