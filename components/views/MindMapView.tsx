@@ -18,7 +18,7 @@ import {
 import dagre from 'dagre';
 import { nanoid } from 'nanoid';
 import { MindMapNode } from '@/components/nodes/MindMapNode';
-import { RelationshipEdge } from '@/components/edges/RelationshipEdge';
+import { MindMapEdge } from '@/components/edges/MindMapEdge';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,7 @@ const nodeTypes: NodeTypes = {
 };
 
 const edgeTypes: EdgeTypes = {
-  relationship: RelationshipEdge,
+  'mindmap-edge': MindMapEdge,
 };
 
 // 분기 색상 팔레트
@@ -224,11 +224,16 @@ function getLayoutedElements(
   const sourceHandlePos = direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom';
   const targetHandlePos = direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top';
 
-  const layoutedEdges = visibleEdges.map((edge) => ({
-    ...edge,
-    sourceHandle: sourceHandlePos,
-    targetHandle: targetHandlePos,
-  }));
+  const layoutedEdges = visibleEdges.map((edge) => {
+    const edgeColor = getBranchColor(edge.target);
+    return {
+      ...edge,
+      type: 'mindmap-edge' as const,
+      sourceHandle: sourceHandlePos,
+      targetHandle: targetHandlePos,
+      data: { ...edge.data, color: edgeColor } as LifeMapEdgeData,
+    };
+  });
 
   return { nodes: layoutedNodes, edges: layoutedEdges };
 }
