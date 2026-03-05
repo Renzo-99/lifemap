@@ -4,10 +4,10 @@ import { memo, useState } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
   useReactFlow,
   type EdgeProps,
   type Edge,
+  Position,
 } from '@xyflow/react';
 import type { LifeMapEdgeData, EdgeThickness, EdgeStyle, EdgeDirection } from '@/types';
 import { RELATIONSHIP_TYPE_LABELS } from '@/lib/constants';
@@ -35,6 +35,36 @@ const DIRECTION_OPTIONS: { value: EdgeDirection; label: string }[] = [
   { value: 'both', label: '↔ 양방향' },
 ];
 
+// 직각 트리 커넥터 경로 계산
+// 패턴: 부모 → 수평선 → 수직 스파인 → 수평선 → 자식
+function getOrthogonalPath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  sourcePosition: Position,
+  targetPosition: Position,
+): { path: string; labelX: number; labelY: number } {
+  const isHorizontal =
+    sourcePosition === Position.Right || sourcePosition === Position.Left;
+
+  if (isHorizontal) {
+    // LR 또는 RL: 수평 → 수직 → 수평
+    const midX = sourceX + (targetX - sourceX) / 2;
+    const path = `M ${sourceX},${sourceY} H ${midX} V ${targetY} H ${targetX}`;
+    const labelX = (sourceX + midX) / 2;
+    const labelY = sourceY;
+    return { path, labelX, labelY };
+  } else {
+    // TB: 수직 → 수평 → 수직
+    const midY = sourceY + (targetY - sourceY) / 2;
+    const path = `M ${sourceX},${sourceY} V ${midY} H ${targetX} V ${targetY}`;
+    const labelX = sourceX;
+    const labelY = (sourceY + midY) / 2;
+    return { path, labelX, labelY };
+  }
+}
+
 function RelationshipEdgeComponent({
   id,
   sourceX,
@@ -49,11 +79,9 @@ function RelationshipEdgeComponent({
   const [showPanel, setShowPanel] = useState(false);
   const { setEdges } = useReactFlow();
 
-  const curvature = data?.['_curvature'] as number | undefined;
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const { path: edgePath, labelX, labelY } = getOrthogonalPath(
     sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
-    curvature: curvature ?? 0.25,
-  });
+  );
 
   const color = data?.color || '#6B7280';
   const thickness = data?.thickness || 1;

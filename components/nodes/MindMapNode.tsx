@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils';
 
 type MindMapNodeType = Node<LifeMapNodeData, 'mindmap'>;
 
+// 투명 핸들 (트리 커넥터에서는 핸들 점이 보이면 안 됨)
+const HANDLE_HIDDEN = '!w-1 !h-1 !bg-transparent !border-transparent !min-w-0 !min-h-0';
+
 function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(data.label);
@@ -30,22 +33,30 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
     }
   }, [id, editLabel, data.label, updateNodeData]);
 
+  // 공통 핸들 (4방향, 투명)
+  const handles = (
+    <>
+      <Handle type="source" id="right" position={Position.Right} className={HANDLE_HIDDEN} />
+      <Handle type="source" id="left" position={Position.Left} className={HANDLE_HIDDEN} />
+      <Handle type="source" id="bottom" position={Position.Bottom} className={HANDLE_HIDDEN} />
+      <Handle type="target" id="left" position={Position.Left} className={HANDLE_HIDDEN} />
+      <Handle type="target" id="right" position={Position.Right} className={HANDLE_HIDDEN} />
+      <Handle type="target" id="top" position={Position.Top} className={HANDLE_HIDDEN} />
+    </>
+  );
+
   // 중심 노드
   if (isCenter) {
     return (
       <div
         className={cn(
-          'flex items-center justify-center rounded-2xl border-2 bg-gradient-to-br from-blue-500 to-blue-600 px-6 py-3 text-white shadow-lg',
+          'flex items-center justify-center rounded-lg border-2 bg-gradient-to-br from-blue-500 to-blue-600 px-5 py-2.5 text-white shadow-md',
           selected && 'ring-4 ring-blue-300'
         )}
-        style={{ minWidth: 140 }}
+        style={{ minWidth: 120 }}
         onDoubleClick={handleDoubleClick}
       >
-        <Handle type="source" id="right" position={Position.Right} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" id="left" position={Position.Left} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" id="top" position={Position.Top} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" id="bottom" position={Position.Bottom} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-
+        {handles}
         {isEditing ? (
           <input
             className="w-full bg-transparent text-center text-sm font-bold outline-none placeholder-blue-200"
@@ -67,19 +78,12 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
     return (
       <div
         className={cn(
-          'flex items-center gap-2 rounded-xl border-2 bg-white px-4 py-2 shadow-sm transition-all',
+          'flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 shadow-sm transition-all',
           selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
         )}
-        style={{ minWidth: 100 }}
         onDoubleClick={handleDoubleClick}
       >
-        <Handle type="target" id="left" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="target" id="top" position={Position.Top} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="target" id="right" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="source" id="right" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="source" id="bottom" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="source" id="left" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-400" />
-
+        {handles}
         <span
           className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
           style={{ backgroundColor: data.color }}
@@ -95,7 +99,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
             autoFocus
           />
         ) : (
-          <span className="text-sm font-semibold text-gray-800">{data.label}</span>
+          <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{data.label}</span>
         )}
 
         {isCollapsed && childCount > 0 && (
@@ -111,19 +115,12 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
   return (
     <div
       className={cn(
-        'flex items-center gap-1.5 rounded-lg border bg-white px-3 py-1.5 transition-all',
+        'flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 transition-all',
         selected ? 'border-blue-400 shadow-sm ring-1 ring-blue-200' : 'border-gray-150 hover:border-gray-300'
       )}
-      style={{ minWidth: 80 }}
       onDoubleClick={handleDoubleClick}
     >
-      <Handle type="target" id="left" position={Position.Left} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="target" id="top" position={Position.Top} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="target" id="right" position={Position.Right} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="source" id="right" position={Position.Right} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="source" id="bottom" position={Position.Bottom} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="source" id="left" position={Position.Left} className="!w-2 !h-2 !bg-gray-300" />
-
+      {handles}
       {isEditing ? (
         <input
           className="w-full bg-transparent text-xs text-gray-700 outline-none"
@@ -134,7 +131,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
           autoFocus
         />
       ) : (
-        <span className="text-xs text-gray-700">{data.label}</span>
+        <span className="text-xs text-gray-700 whitespace-nowrap">{data.label}</span>
       )}
 
       {isCollapsed && childCount > 0 && (

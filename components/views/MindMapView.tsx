@@ -159,7 +159,7 @@ function getLayoutedElements(
   // dagre 레이아웃
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 180, marginx: 60, marginy: 60 });
+  g.setGraph({ rankdir: direction, nodesep: 30, ranksep: 160, marginx: 40, marginy: 40 });
 
   visibleNodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
@@ -224,27 +224,11 @@ function getLayoutedElements(
   const sourceHandlePos = direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom';
   const targetHandlePos = direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top';
 
-  // 같은 부모에서 나가는 엣지들의 곡률을 분산
-  const edgesBySource = new Map<string, typeof visibleEdges>();
-  for (const edge of visibleEdges) {
-    if (!edgesBySource.has(edge.source)) edgesBySource.set(edge.source, []);
-    edgesBySource.get(edge.source)!.push(edge);
-  }
-
-  const layoutedEdges = visibleEdges.map((edge) => {
-    const siblings = edgesBySource.get(edge.source) || [];
-    const idx = siblings.indexOf(edge);
-    const count = siblings.length;
-    // 곡률을 -0.3 ~ 0.3 범위로 분산 (엣지가 1개면 0.25 기본값)
-    const curvature = count <= 1 ? 0.25 : 0.15 + ((idx / (count - 1)) - 0.5) * 0.5;
-
-    return {
-      ...edge,
-      sourceHandle: sourceHandlePos,
-      targetHandle: targetHandlePos,
-      data: { ...edge.data, _curvature: curvature } as LifeMapEdgeData,
-    };
-  });
+  const layoutedEdges = visibleEdges.map((edge) => ({
+    ...edge,
+    sourceHandle: sourceHandlePos,
+    targetHandle: targetHandlePos,
+  }));
 
   return { nodes: layoutedNodes, edges: layoutedEdges };
 }
