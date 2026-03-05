@@ -163,8 +163,11 @@ function getLayoutedElements(
 
   visibleNodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const w = depth === 0 ? 160 : depth === 1 ? 140 : 120;
-    const h = depth === 0 ? 50 : depth === 1 ? 40 : 32;
+    // 라벨 길이 기반으로 노드 너비를 추정 (한글 1자 ≈ 14px, 패딩 포함)
+    const labelLen = node.data.label?.length || 4;
+    const baseW = depth === 0 ? 160 : depth === 1 ? 140 : 120;
+    const w = Math.max(baseW, labelLen * 14 + 60);
+    const h = depth === 0 ? 50 : depth === 1 ? 44 : 36;
     g.setNode(node.id, { width: w, height: h });
   });
   visibleEdges.forEach((edge) => {
@@ -221,11 +224,27 @@ function getLayoutedElements(
   const sourceHandlePos = direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom';
   const targetHandlePos = direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top';
 
-  const layoutedEdges = visibleEdges.map((edge) => ({
-    ...edge,
-    sourceHandle: sourceHandlePos,
-    targetHandle: targetHandlePos,
-  }));
+  // 같은 부모에서 나가는 엣지들의 곡률을 분산
+  const edgesBySource = new Map<string, typeof visibleEdges>();
+  for (const edge of visibleEdges) {
+    if (!edgesBySource.has(edge.source)) edgesBySource.set(edge.source, []);
+    edgesBySource.get(edge.source)!.push(edge);
+  }
+
+  const layoutedEdges = visibleEdges.map((edge) => {
+    const siblings = edgesBySource.get(edge.source) || [];
+    const idx = siblings.indexOf(edge);
+    const count = siblings.length;
+    // 곡률을 -0.3 ~ 0.3 범위로 분산 (엣지가 1개면 0.25 기본값)
+    const curvature = count <= 1 ? 0.25 : 0.15 + ((idx / (count - 1)) - 0.5) * 0.5;
+
+    return {
+      ...edge,
+      sourceHandle: sourceHandlePos,
+      targetHandle: targetHandlePos,
+      data: { ...edge.data, _curvature: curvature } as LifeMapEdgeData,
+    };
+  });
 
   return { nodes: layoutedNodes, edges: layoutedEdges };
 }
