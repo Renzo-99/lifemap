@@ -159,7 +159,7 @@ function getLayoutedElements(
   // dagre 레이아웃
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 100, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 180, marginx: 60, marginy: 60 });
 
   visibleNodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
@@ -212,11 +212,22 @@ function getLayoutedElements(
         _isCollapsed: isCollapsed,
         _childCount: childCount,
         _depth: depth,
+        _direction: direction,
       } as LifeMapNodeData,
     };
   });
 
-  return { nodes: layoutedNodes, edges: visibleEdges };
+  // 방향에 따라 sourceHandle/targetHandle 지정
+  const sourceHandlePos = direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom';
+  const targetHandlePos = direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top';
+
+  const layoutedEdges = visibleEdges.map((edge) => ({
+    ...edge,
+    sourceHandle: sourceHandlePos,
+    targetHandle: targetHandlePos,
+  }));
+
+  return { nodes: layoutedNodes, edges: layoutedEdges };
 }
 
 export function MindMapView({ sourceNodes, sourceEdges, onNodesChange: syncNodes, onEdgesChange: syncEdges }: MindMapViewProps) {

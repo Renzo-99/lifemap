@@ -5,6 +5,7 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  getSmoothStepPath,
   useReactFlow,
   type EdgeProps,
   type Edge,
@@ -49,8 +50,9 @@ function RelationshipEdgeComponent({
   const [showPanel, setShowPanel] = useState(false);
   const { setEdges } = useReactFlow();
 
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
+    borderRadius: 12,
   });
 
   const color = data?.color || '#6B7280';

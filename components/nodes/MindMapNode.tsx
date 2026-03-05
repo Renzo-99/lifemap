@@ -41,10 +41,10 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
         style={{ minWidth: 140 }}
         onDoubleClick={handleDoubleClick}
       >
-        <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" position={Position.Left} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" position={Position.Top} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
-        <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
+        <Handle type="source" id="right" position={Position.Right} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
+        <Handle type="source" id="left" position={Position.Left} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
+        <Handle type="source" id="top" position={Position.Top} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
+        <Handle type="source" id="bottom" position={Position.Bottom} className="!w-3 !h-3 !bg-blue-300 !border-blue-400" />
 
         {isEditing ? (
           <input
@@ -73,8 +73,12 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
         style={{ minWidth: 100 }}
         onDoubleClick={handleDoubleClick}
       >
-        <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-400" />
-        <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="target" id="left" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="target" id="top" position={Position.Top} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="target" id="right" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="source" id="right" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="source" id="bottom" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-gray-400" />
+        <Handle type="source" id="left" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-400" />
 
         <span
           className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
@@ -113,8 +117,12 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
       style={{ minWidth: 80 }}
       onDoubleClick={handleDoubleClick}
     >
-      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-gray-300" />
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="target" id="left" position={Position.Left} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="target" id="top" position={Position.Top} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="target" id="right" position={Position.Right} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="source" id="right" position={Position.Right} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="source" id="bottom" position={Position.Bottom} className="!w-2 !h-2 !bg-gray-300" />
+      <Handle type="source" id="left" position={Position.Left} className="!w-2 !h-2 !bg-gray-300" />
 
       {isEditing ? (
         <input
