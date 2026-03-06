@@ -55,7 +55,9 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!centerNodeId) {
+    // 중심 노드가 없거나, 현재 중심 노드가 노드 목록에서 삭제된 경우 재탐색
+    const centerExists = centerNodeId && regularNodes.some((n) => n.id === centerNodeId);
+    if (!centerExists) {
       setCenterNodeId(findCenterNodeId(regularNodes, sourceEdges));
     }
   }, [regularNodes, sourceEdges, centerNodeId]);
@@ -63,20 +65,13 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<LifeMapNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LifeMapEdgeData>>([]);
 
-  // 구조 변경 시그니처 — 노드/에지 ID 목록이 바뀔 때만 레이아웃 재계산
-  const structureKey = useMemo(() => {
-    const nodeIds = regularNodes.map((n) => n.id).sort().join(',');
-    const edgeIds = sourceEdges.map((e) => `${e.source}-${e.target}`).sort().join(',');
-    return `${nodeIds}|${edgeIds}`;
-  }, [regularNodes, sourceEdges]);
-
-  // 레이아웃 변경 시 동기화 (구조 변경 또는 방향/접기 변경 시만)
+  // 레이아웃 변경 시 동기화
   useEffect(() => {
-    if (!centerNodeId) return;
+    if (!centerNodeId || regularNodes.length === 0) return;
     const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
     setNodes(result.nodes);
     setEdges(result.edges);
-  }, [structureKey, centerNodeId, direction, collapsedIds, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 데이터 변경(라벨 등)은 레이아웃 없이 노드 데이터만 갱신
   useEffect(() => {
