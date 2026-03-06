@@ -9,7 +9,8 @@ const VIEW_TABS: { id: ViewMode; label: string; shortcut: string }[] = [
   { id: 'canvas', label: '캔버스', shortcut: '1' },
   { id: 'mindmap', label: '마인드맵', shortcut: '2' },
   { id: 'mandalart', label: '만다라트', shortcut: '3' },
-  { id: 'graph', label: '그래프', shortcut: '4' },
+  // 그래프 뷰는 당분간 숨김 (코드는 GraphView.tsx에 유지)
+  // { id: 'graph', label: '그래프', shortcut: '4' },
 ];
 
 export function TopBar() {
