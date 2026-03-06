@@ -19,6 +19,8 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
   const isCollapsed = (data as any)._isCollapsed;
   const childCount = (data as any)._childCount || 0;
   const depth = (data as any)._depth || 0;
+  const direction = (data as any)._direction || 'LR';
+  const isLeft = direction === 'RL';
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -45,6 +47,36 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
     </>
   );
 
+  // 접힌 노드 배지
+  const collapsedBadge = isCollapsed && childCount > 0 && (
+    <span className={cn(
+      'rounded-full bg-gray-200 px-1.5 text-[10px] font-medium text-gray-500',
+      depth >= 2 && 'bg-gray-100 px-1 text-[9px] text-gray-400',
+    )}>
+      +{childCount}
+    </span>
+  );
+
+  // 편집 입력
+  const editInput = (inputClass: string) => (
+    <input
+      className={cn('w-full bg-transparent outline-none', inputClass)}
+      value={editLabel}
+      onChange={(e) => setEditLabel(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); }}
+      autoFocus
+    />
+  );
+
+  // 색상 도트
+  const colorDot = (
+    <span
+      className={cn('flex-shrink-0 rounded-full', depth === 1 ? 'h-2.5 w-2.5' : 'h-2 w-2')}
+      style={{ backgroundColor: data.color }}
+    />
+  );
+
   // 중심 노드
   if (isCenter) {
     return (
@@ -58,14 +90,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
       >
         {handles}
         {isEditing ? (
-          <input
-            className="w-full bg-transparent text-center text-sm font-bold outline-none placeholder-blue-200"
-            value={editLabel}
-            onChange={(e) => setEditLabel(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); }}
-            autoFocus
-          />
+          editInput('text-center text-sm font-bold placeholder-blue-200')
         ) : (
           <span className="text-sm font-bold">{data.label}</span>
         )}
@@ -73,72 +98,53 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
     );
   }
 
-  // 1차 가지 (depth 1)
+  // 1차 가지 (depth 1) — isLeft이면 flex-row-reverse로 도트/텍스트 방향 반전
   if (depth === 1) {
     return (
       <div
         className={cn(
           'flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 shadow-sm transition-all',
+          isLeft && 'flex-row-reverse',
           selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
         )}
         onDoubleClick={handleDoubleClick}
       >
         {handles}
-        <span
-          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-          style={{ backgroundColor: data.color }}
-        />
+        {colorDot}
 
         {isEditing ? (
-          <input
-            className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none"
-            value={editLabel}
-            onChange={(e) => setEditLabel(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); }}
-            autoFocus
-          />
+          editInput(cn('text-sm font-semibold text-gray-800', isLeft && 'text-right'))
         ) : (
-          <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{data.label}</span>
-        )}
-
-        {isCollapsed && childCount > 0 && (
-          <span className="ml-1 rounded-full bg-gray-200 px-1.5 text-[10px] font-medium text-gray-500">
-            +{childCount}
+          <span className={cn('text-sm font-semibold text-gray-800 whitespace-nowrap', isLeft && 'text-right')}>
+            {data.label}
           </span>
         )}
+
+        {collapsedBadge}
       </div>
     );
   }
 
-  // 2차+ 가지 (depth 2+)
+  // 2차+ 가지 (depth 2+) — isLeft이면 flex-row-reverse
   return (
     <div
       className={cn(
         'flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 transition-all',
+        isLeft && 'flex-row-reverse',
         selected ? 'border-blue-400 shadow-sm ring-1 ring-blue-200' : 'border-gray-150 hover:border-gray-300'
       )}
       onDoubleClick={handleDoubleClick}
     >
       {handles}
       {isEditing ? (
-        <input
-          className="w-full bg-transparent text-xs text-gray-700 outline-none"
-          value={editLabel}
-          onChange={(e) => setEditLabel(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); }}
-          autoFocus
-        />
+        editInput(cn('text-xs text-gray-700', isLeft && 'text-right'))
       ) : (
-        <span className="text-xs text-gray-700 whitespace-nowrap">{data.label}</span>
-      )}
-
-      {isCollapsed && childCount > 0 && (
-        <span className="ml-1 rounded-full bg-gray-100 px-1 text-[9px] font-medium text-gray-400">
-          +{childCount}
+        <span className={cn('text-xs text-gray-700 whitespace-nowrap', isLeft && 'text-right')}>
+          {data.label}
         </span>
       )}
+
+      {collapsedBadge}
     </div>
   );
 }
