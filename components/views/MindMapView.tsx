@@ -53,6 +53,8 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // 중심 노드 자식별 좌/우 오버라이드 (드래그로 변경)
+  const [sideOverrides, setSideOverrides] = useState<Map<string, 'left' | 'right'>>(new Map());
 
   useEffect(() => {
     // 중심 노드가 없거나, 현재 중심 노드가 노드 목록에서 삭제된 경우 재탐색
@@ -68,10 +70,10 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   // 레이아웃 변경 시 동기화
   useEffect(() => {
     if (!centerNodeId || regularNodes.length === 0) return;
-    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
+    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides);
     setNodes(result.nodes);
     setEdges(result.edges);
-  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 데이터 변경(라벨 등)은 레이아웃 없이 노드 데이터만 갱신
   useEffect(() => {
@@ -185,12 +187,49 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
     []
   );
 
+  // 드래그 종료 시: 중심 노드 x좌표 기준으로 브랜치 좌/우 재할당
+  const onNodeDragStop = useCallback(
+    (_evt: React.MouseEvent, draggedNode: Node<LifeMapNodeData>) => {
+      if (!centerNodeId || direction !== 'HORIZONTAL') return;
+
+      // 중심 노드의 현재 위치
+      const centerNode = nodes.find((n) => n.id === centerNodeId);
+      if (!centerNode) return;
+      const centerX = centerNode.position.x;
+
+      // 드래그된 노드의 브랜치 루트(중심의 직계 자식) 찾기
+      const { parentMap } = buildTree(regularNodes, sourceEdges, centerNodeId);
+      let branchRoot = draggedNode.id;
+      let parent = parentMap.get(branchRoot);
+      while (parent && parent !== centerNodeId) {
+        branchRoot = parent;
+        parent = parentMap.get(branchRoot);
+      }
+      // 브랜치 루트의 부모가 중심이 아니면 무시 (중심 노드 자체를 드래그한 경우 등)
+      if (parent !== centerNodeId) return;
+
+      // 드래그된 노드의 x위치로 side 결정
+      const newSide: 'left' | 'right' = draggedNode.position.x < centerX ? 'left' : 'right';
+      const currentSide = sideOverrides.get(branchRoot);
+
+      // 기존 side와 다르면 업데이트 → 레이아웃 재실행
+      if (currentSide !== newSide) {
+        setSideOverrides((prev) => {
+          const next = new Map(prev);
+          next.set(branchRoot, newSide);
+          return next;
+        });
+      }
+    },
+    [centerNodeId, direction, nodes, regularNodes, sourceEdges, sideOverrides]
+  );
+
   const autoLayout = useCallback(() => {
     if (!centerNodeId) return;
-    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
+    const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides);
     setNodes(result.nodes);
     setEdges(result.edges);
-  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]);
+  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides, setNodes, setEdges]);
 
   return (
     <div className="h-full w-full" onKeyDown={onKeyDown} tabIndex={0}>
@@ -201,6 +240,7 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ type: 'relationship' }}

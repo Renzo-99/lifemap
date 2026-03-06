@@ -178,7 +178,8 @@ export function getLayoutedElements(
   edges: Edge<LifeMapEdgeData>[],
   centerId: string,
   direction: LayoutDirection,
-  collapsedIds: Set<string>
+  collapsedIds: Set<string>,
+  sideOverrides?: Map<string, 'left' | 'right'>
 ) {
   const { depthMap, parentMap, childrenMap, directedEdges } = buildTree(nodes, edges, centerId);
   const hiddenIds = computeHiddenIds(collapsedIds, childrenMap);
@@ -192,7 +193,7 @@ export function getLayoutedElements(
   // 양방향 레이아웃
   if (direction === 'HORIZONTAL') {
     return layoutBidirectional(
-      visibleNodes, visibleEdges, centerId, depthMap, childrenMap, collapsedIds, getBranchColor, visibleNodeIds
+      visibleNodes, visibleEdges, centerId, depthMap, childrenMap, collapsedIds, getBranchColor, visibleNodeIds, sideOverrides
     );
   }
 
@@ -248,12 +249,22 @@ function layoutBidirectional(
   childrenMap: Map<string, string[]>,
   collapsedIds: Set<string>,
   getBranchColor: (nodeId: string) => string,
-  visibleNodeIds: Set<string>
+  visibleNodeIds: Set<string>,
+  sideOverrides?: Map<string, 'left' | 'right'>
 ) {
   const centerChildren = (childrenMap.get(centerId) || []).filter((id) => visibleNodeIds.has(id));
-  const half = Math.ceil(centerChildren.length / 2);
-  const rightChildren = centerChildren.slice(0, half);
-  const leftChildren = centerChildren.slice(half);
+
+  // sideOverrides가 있으면 그것을 기준으로, 없으면 인덱스 기반 반분할
+  let rightChildren: string[];
+  let leftChildren: string[];
+  if (sideOverrides && sideOverrides.size > 0) {
+    rightChildren = centerChildren.filter((id) => sideOverrides.get(id) !== 'left');
+    leftChildren = centerChildren.filter((id) => sideOverrides.get(id) === 'left');
+  } else {
+    const half = Math.ceil(centerChildren.length / 2);
+    rightChildren = centerChildren.slice(0, half);
+    leftChildren = centerChildren.slice(half);
+  }
 
   // 각 브랜치 소속 노드 ID 수집
   const rightIds = new Set<string>();
