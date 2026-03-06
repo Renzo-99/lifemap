@@ -319,10 +319,10 @@ function LifeMapCanvasInner() {
                 multiSelectionKeyCode="Shift"
                 proOptions={{ hideAttribution: true }}
               >
-                <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
-                <Controls className="!bottom-10 !left-4 !shadow-md !border-gray-200 !rounded-lg" showInteractive={false} />
+                <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E8EB" />
+                <Controls className="!bottom-10 !left-4" showInteractive={false} />
                 <MiniMap
-                  className="!bottom-10 !right-4 !shadow-md !border-gray-200 !rounded-lg"
+                  className="!bottom-10 !right-4"
                   nodeColor={(n) => (n.data as LifeMapNodeData)?.color || '#CBD5E1'}
                   maskColor="rgba(250, 251, 252, 0.7)"
                   pannable
@@ -338,7 +338,7 @@ function LifeMapCanvasInner() {
                     />
                     <button
                       onClick={handleAutoLayout}
-                      className="rounded-lg border border-gray-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm backdrop-blur-sm transition-colors hover:bg-gray-50 hover:text-gray-900"
+                      className="rounded-xl border border-[#E5E8EB] bg-white/95 px-3 py-1.5 text-[13px] font-medium text-[#4E5968] shadow-[0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-sm transition-all duration-150 hover:bg-[#F9FAFB] hover:text-[#191F28]"
                     >
                       자동 정렬
                     </button>

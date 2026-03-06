@@ -27,15 +27,12 @@ function GoalNodeComponent({ id, data, selected }: NodeProps<GoalNodeType>) {
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center border-2 bg-white px-4 py-3 shadow-sm transition-shadow',
-        selected ? 'border-orange-500 shadow-md ring-2 ring-orange-200' : 'border-gray-200'
+        'flex flex-col items-center justify-center rounded-2xl border-2 bg-white px-4 py-3 transition-all duration-150 ease-in-out',
+        selected
+          ? 'border-[#3182F6] ring-2 ring-[#3182F6]/20 shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
+          : 'border-[#E5E8EB] shadow-[0_1px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
       )}
-      style={{
-        minWidth: 120,
-        minHeight: 70,
-        borderRadius: '12px',
-        transform: 'rotate(0deg)',
-      }}
+      style={{ minWidth: 120, minHeight: 70 }}
       onDoubleClick={handleDoubleClick}
     >
       <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-gray-400" />
@@ -50,7 +47,7 @@ function GoalNodeComponent({ id, data, selected }: NodeProps<GoalNodeType>) {
 
       {isEditing ? (
         <input
-          className="mt-1 w-full border-b border-orange-400 bg-transparent text-center text-sm font-semibold outline-none"
+          className="mt-1 w-full border-b border-[#3182F6] bg-transparent text-center text-sm font-semibold outline-none"
           value={editLabel}
           onChange={(e) => setEditLabel(e.target.value)}
           onBlur={handleBlur}
@@ -58,7 +55,7 @@ function GoalNodeComponent({ id, data, selected }: NodeProps<GoalNodeType>) {
           autoFocus
         />
       ) : (
-        <span className="mt-1 text-sm font-semibold text-gray-800 text-center leading-tight">
+        <span className="mt-1 text-sm font-semibold text-[#333D4B] text-center leading-tight">
           {data.label}
         </span>
       )}

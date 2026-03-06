@@ -37,13 +37,13 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
   };
 
   return (
-    <aside className="flex w-80 flex-col border-l border-gray-200 bg-white">
+    <aside className="flex w-80 flex-col border-l border-[#F2F4F6] bg-white">
       {/* 헤더 */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <span className="text-sm font-semibold text-gray-800">{node.label}</span>
+      <div className="flex items-center justify-between border-b border-[#F2F4F6] px-4 py-3">
+        <span className="text-sm font-semibold text-[#191F28]">{node.label}</span>
         <button
           onClick={() => setRightPanelOpen(false)}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-lg p-1 text-[#B0B8C1] transition-all duration-150 hover:bg-[#F2F4F6] hover:text-[#4E5968]"
         >
           <X className="h-4 w-4" />
         </button>
@@ -51,9 +51,9 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
 
       <div className="flex-1 overflow-y-auto">
         {/* 기본 정보 */}
-        <div className="border-b border-gray-100 px-4 py-3">
+        <div className="border-b border-[#F2F4F6] px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">타입:</span>
+            <span className="text-xs text-[#8B95A1]">타입:</span>
             <span
               className="rounded-full px-2 py-0.5 text-xs font-medium"
               style={{ backgroundColor: node.color + '15', color: node.color }}
@@ -64,9 +64,9 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
 
           {/* 라벨 수정 */}
           <div className="mt-3">
-            <span className="text-xs text-gray-500">이름:</span>
+            <span className="text-xs text-[#8B95A1]">이름:</span>
             <input
-              className="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-300 focus:bg-white"
+              className="mt-1 w-full rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] px-2.5 py-1.5 text-sm text-[#333D4B] outline-none transition-all duration-150 focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
               value={node.label}
               onChange={(e) => handleUpdateNode({ label: e.target.value })}
             />
@@ -74,16 +74,16 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
 
           {/* 태그 */}
           <div className="mt-3 flex items-start gap-2">
-            <Tag className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+            <Tag className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-[#B0B8C1]" />
             <div className="flex flex-wrap gap-1">
               {node.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="group flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                  className="group flex items-center rounded-full bg-[#F2F4F6] px-2 py-0.5 text-xs text-[#6B7684]"
                 >
                   {tag}
                   <button
-                    className="ml-1 hidden text-gray-400 hover:text-red-400 group-hover:inline"
+                    className="ml-1 hidden text-[#B0B8C1] hover:text-[#FF4545] group-hover:inline"
                     onClick={() => handleUpdateNode({ tags: node.tags.filter((t) => t !== tag) })}
                   >
                     x
@@ -91,7 +91,7 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
                 </span>
               ))}
               <button
-                className="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500"
+                className="rounded-full border border-dashed border-[#D1D6DB] px-2 py-0.5 text-xs text-[#B0B8C1] hover:border-[#B0B8C1] hover:text-[#6B7684]"
                 onClick={() => {
                   const tag = prompt('태그 입력:');
                   if (tag) {
@@ -106,12 +106,12 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
         </div>
 
         {/* 메모 */}
-        <div className="border-b border-gray-100 px-4 py-3">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <div className="border-b border-[#F2F4F6] px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[#8B95A1]">
             메모
           </div>
           <textarea
-            className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 outline-none focus:border-blue-300 focus:bg-white"
+            className="w-full resize-none rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] p-3 text-sm text-[#333D4B] outline-none transition-all duration-150 focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
             rows={6}
             placeholder="메모를 입력하세요..."
             value={node.memo}
@@ -120,8 +120,8 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
         </div>
 
         {/* 연결된 관계 */}
-        <div className="border-b border-gray-100 px-4 py-3">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <div className="border-b border-[#F2F4F6] px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[#8B95A1]">
             <Link2 className="h-3.5 w-3.5" />
             연결된 관계 ({connectedEdges.length})
           </div>
@@ -136,10 +136,10 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
               return (
                 <div
                   key={edge.id}
-                  className="flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5 text-xs"
+                  className="flex items-center gap-2 rounded-md bg-[#F9FAFB] px-2.5 py-1.5 text-xs"
                 >
-                  <span className="text-gray-400">{direction}</span>
-                  <span className="font-medium text-gray-700">
+                  <span className="text-[#B0B8C1]">{direction}</span>
+                  <span className="font-medium text-[#4E5968]">
                     {otherNode?.data?.label || '알 수 없음'}
                   </span>
                   {relType && (
@@ -157,18 +157,18 @@ export function RightPanel({ flowNodes, flowEdges }: RightPanelProps) {
               );
             })}
             {connectedEdges.length === 0 && (
-              <span className="text-xs text-gray-400">연결된 관계가 없습니다</span>
+              <span className="text-xs text-[#B0B8C1]">연결된 관계가 없습니다</span>
             )}
           </div>
         </div>
 
         {/* 메타데이터 */}
         <div className="px-4 py-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <div className="flex items-center gap-1.5 text-xs text-[#B0B8C1]">
             <Calendar className="h-3 w-3" />
             생성: {formatDate(node.createdAt)}
           </div>
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-400">
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-[#B0B8C1]">
             <Calendar className="h-3 w-3" />
             수정: {formatDate(node.updatedAt)}
           </div>

@@ -27,8 +27,10 @@ function PersonNodeComponent({ id, data, selected }: NodeProps<PersonNodeType>) 
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center rounded-xl border-2 bg-white px-4 py-3 shadow-sm transition-shadow',
-        selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-gray-200'
+        'flex flex-col items-center justify-center rounded-2xl border-2 bg-white px-4 py-3 transition-all duration-150 ease-in-out',
+        selected
+          ? 'border-[#3182F6] ring-2 ring-[#3182F6]/20 shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
+          : 'border-[#E5E8EB] shadow-[0_1px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
       )}
       style={{ minWidth: 120, minHeight: 70 }}
       onDoubleClick={handleDoubleClick}
@@ -49,7 +51,7 @@ function PersonNodeComponent({ id, data, selected }: NodeProps<PersonNodeType>) 
 
       {isEditing ? (
         <input
-          className="mt-1 w-full border-b border-blue-400 bg-transparent text-center text-sm font-semibold outline-none"
+          className="mt-1 w-full border-b border-[#3182F6] bg-transparent text-center text-sm font-semibold outline-none"
           value={editLabel}
           onChange={(e) => setEditLabel(e.target.value)}
           onBlur={handleBlur}
@@ -57,7 +59,7 @@ function PersonNodeComponent({ id, data, selected }: NodeProps<PersonNodeType>) 
           autoFocus
         />
       ) : (
-        <span className="mt-1 text-sm font-semibold text-gray-800 text-center leading-tight">
+        <span className="mt-1 text-sm font-semibold text-[#333D4B] text-center leading-tight">
           {data.label}
         </span>
       )}

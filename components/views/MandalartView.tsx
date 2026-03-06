@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import type { Node, Edge } from '@xyflow/react';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
-import { NODE_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 interface MandalartViewProps {
@@ -11,194 +11,402 @@ interface MandalartViewProps {
   sourceEdges: Edge<LifeMapEdgeData>[];
 }
 
-export function MandalartView({ sourceNodes, sourceEdges }: MandalartViewProps) {
-  const regularNodes = useMemo(
-    () => sourceNodes.filter((n) => n.type !== 'group'),
-    [sourceNodes]
-  );
+// 9x9 그리드 데이터 (81셀)
+type MandalartGrid = string[][];
 
-  // 목표 노드를 중심으로 만다라트 구성
-  const goalNodes = useMemo(
-    () => regularNodes.filter((n) => n.data.type === 'goal'),
-    [regularNodes]
-  );
+interface MandalartSheet {
+  id: string;
+  title: string;
+  grid: MandalartGrid;
+}
 
-  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
-    goalNodes[0]?.id || null
-  );
+function createEmptyGrid(): MandalartGrid {
+  return Array.from({ length: 9 }, () => Array(9).fill(''));
+}
 
-  // 선택된 목표에 연결된 노드들 가져오기
-  const connectedNodes = useMemo(() => {
-    if (!selectedGoalId) return [];
-    const connectedIds = new Set<string>();
-    sourceEdges.forEach((e) => {
-      if (e.source === selectedGoalId) connectedIds.add(e.target);
-      if (e.target === selectedGoalId) connectedIds.add(e.source);
-    });
-    return regularNodes.filter((n) => connectedIds.has(n.id));
-  }, [selectedGoalId, sourceEdges, regularNodes]);
+function createSheet(title: string): MandalartSheet {
+  return {
+    id: crypto.randomUUID(),
+    title,
+    grid: createEmptyGrid(),
+  };
+}
 
-  // 3x3 그리드에 배치 (중앙 = 목표, 주변 8칸 = 연결 노드)
-  const centerGoal = regularNodes.find((n) => n.id === selectedGoalId);
-  const gridItems = useMemo(() => {
-    const items: (Node<LifeMapNodeData> | null)[] = Array(9).fill(null);
-    items[4] = centerGoal || null; // 중앙
-    connectedNodes.slice(0, 8).forEach((node, i) => {
-      const positions = [0, 1, 2, 3, 5, 6, 7, 8];
-      items[positions[i]] = node;
-    });
-    return items;
-  }, [centerGoal, connectedNodes]);
+// 중앙 블록(1,1)의 8개 서브 목표 위치 → 대응하는 외곽 블록 중심 위치
+const SUB_GOAL_MAP: [number, number, number, number][] = [
+  [3, 3, 1, 1], [3, 4, 1, 4], [3, 5, 1, 7],
+  [4, 3, 4, 1],               [4, 5, 4, 7],
+  [5, 3, 7, 1], [5, 4, 7, 4], [5, 5, 7, 7],
+];
 
-  // 2단계: 각 주변 노드에 연결된 노드들의 3x3 그리드
-  const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
+const STORAGE_KEY = 'lifemap-mandalart-sheets';
 
-  const expandedGrid = useMemo(() => {
-    if (!expandedNodeId) return null;
-    const connIds = new Set<string>();
-    sourceEdges.forEach((e) => {
-      if (e.source === expandedNodeId) connIds.add(e.target);
-      if (e.target === expandedNodeId) connIds.add(e.source);
-    });
-    // 원래 목표 제외
-    const subNodes = regularNodes.filter(
-      (n) => connIds.has(n.id) && n.id !== selectedGoalId
-    );
-    const items: (Node<LifeMapNodeData> | null)[] = Array(9).fill(null);
-    const center = regularNodes.find((n) => n.id === expandedNodeId);
-    items[4] = center || null;
-    subNodes.slice(0, 8).forEach((node, i) => {
-      const positions = [0, 1, 2, 3, 5, 6, 7, 8];
-      items[positions[i]] = node;
-    });
-    return items;
-  }, [expandedNodeId, sourceEdges, regularNodes, selectedGoalId]);
+function loadSheets(): MandalartSheet[] {
+  if (typeof window === 'undefined') return [createSheet('만다라트 1')];
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [createSheet('만다라트 1')];
+}
+
+function saveSheets(sheets: MandalartSheet[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sheets));
+  } catch { /* ignore */ }
+}
+
+// 셀 분류 함수
+function isCenterBlock(row: number, col: number) {
+  return row >= 3 && row <= 5 && col >= 3 && col <= 5;
+}
+
+function isMainCenter(row: number, col: number) {
+  return row === 4 && col === 4;
+}
+
+function isOuterBlockCenter(row: number, col: number) {
+  if (isCenterBlock(row, col)) return false;
+  return row % 3 === 1 && col % 3 === 1;
+}
+
+function isSubGoalCell(row: number, col: number) {
+  return isCenterBlock(row, col) && !isMainCenter(row, col);
+}
+
+// === 셀 컴포넌트 ===
+interface CellProps {
+  value: string;
+  row: number;
+  col: number;
+  onUpdate: (row: number, col: number, value: string) => void;
+}
+
+function MandalartCell({ value, row, col, onUpdate }: CellProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { setDraft(value); }, [value]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const mainCenter = isMainCenter(row, col);
+  const centerBlock = isCenterBlock(row, col);
+  const outerCenter = isOuterBlockCenter(row, col);
+  const subGoal = isSubGoalCell(row, col);
+
+  const handleCommit = useCallback(() => {
+    setEditing(false);
+    if (draft !== value) {
+      onUpdate(row, col, draft);
+    }
+  }, [draft, value, row, col, onUpdate]);
 
   return (
-    <div className="flex h-full w-full flex-col overflow-auto bg-gray-50 p-6">
-      {/* 목표 선택 */}
-      {goalNodes.length > 0 && (
-        <div className="mb-6 flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-500">목표 선택:</span>
-          <div className="flex gap-2">
-            {goalNodes.map((goal) => (
-              <button
-                key={goal.id}
-                onClick={() => {
-                  setSelectedGoalId(goal.id);
-                  setExpandedNodeId(null);
-                }}
-                className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm font-medium transition-all',
-                  selectedGoalId === goal.id
-                    ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300'
-                    : 'bg-white text-gray-600 hover:bg-gray-100'
-                )}
-              >
-                {goal.data.label}
-              </button>
-            ))}
-          </div>
-        </div>
+    <td
+      className={cn(
+        'relative h-[72px] w-[100px] min-w-[100px] border border-[#E5E8EB] p-1 text-center align-middle transition-colors duration-100',
+        mainCenter && 'bg-[#3182F6] text-white font-bold',
+        !mainCenter && centerBlock && 'bg-[#E8F3FF]',
+        outerCenter && 'bg-[#E8F3FF] font-semibold',
+        !mainCenter && !centerBlock && !outerCenter && 'bg-white',
+        !editing && 'cursor-pointer hover:bg-[#F2F4F6]',
+        mainCenter && !editing && 'hover:bg-[#2B71D9]',
+        centerBlock && !mainCenter && !editing && 'hover:bg-[#D4E8FF]',
       )}
+      onClick={() => {
+        if (!editing) {
+          setEditing(true);
+          setDraft(value);
+        }
+      }}
+    >
+      {editing ? (
+        <textarea
+          ref={inputRef}
+          className="absolute inset-0 resize-none border-2 border-[#3182F6] bg-white p-1.5 text-center text-[12px] leading-snug text-[#191F28] outline-none"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={handleCommit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleCommit();
+            }
+            if (e.key === 'Escape') {
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <span
+          className={cn(
+            'block whitespace-pre-wrap text-[12px] leading-snug',
+            mainCenter && 'text-[13px] font-bold text-white',
+            (subGoal || outerCenter) && 'font-semibold text-[#333D4B]',
+            !mainCenter && !subGoal && !outerCenter && 'text-[#4E5968]',
+          )}
+        >
+          {value || (
+            <span className={cn(
+              'text-[11px]',
+              mainCenter ? 'text-white/50' : 'text-[#D1D6DB]',
+            )}>
+              {mainCenter ? '핵심 목표' : ''}
+            </span>
+          )}
+        </span>
+      )}
+    </td>
+  );
+}
 
-      {/* 만다라트 메인 그리드 */}
-      <div className="flex flex-1 items-center justify-center gap-8">
-        {/* 메인 3x3 */}
-        <div className="grid grid-cols-3 gap-2">
-          {gridItems.map((item, index) => {
-            const isCenter = index === 4;
-            return (
-              <div
-                key={index}
-                onClick={() => {
-                  if (item && !isCenter) setExpandedNodeId(item.id);
-                }}
-                className={cn(
-                  'flex h-28 w-28 flex-col items-center justify-center rounded-xl border-2 p-2 text-center transition-all',
-                  isCenter
-                    ? 'border-orange-400 bg-orange-50 shadow-md'
-                    : item
-                    ? 'cursor-pointer border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-                    : 'border-dashed border-gray-200 bg-gray-50/50',
-                  expandedNodeId === item?.id && !isCenter && 'ring-2 ring-blue-400'
-                )}
-              >
-                {item ? (
-                  <>
-                    <span className="text-lg">{item.data.icon}</span>
-                    <span
-                      className="mt-1 text-xs font-semibold leading-tight"
-                      style={{ color: item.data.color }}
-                    >
-                      {item.data.label}
-                    </span>
-                    {item.data.tags.length > 0 && (
-                      <span className="mt-0.5 text-[9px] text-gray-400">
-                        {item.data.tags[0]}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-[10px] text-gray-300">빈 칸</span>
-                )}
-              </div>
-            );
-          })}
+// === 메인 컴포넌트 ===
+export function MandalartView({ sourceNodes, sourceEdges }: MandalartViewProps) {
+  const [sheets, setSheets] = useState<MandalartSheet[]>([createSheet('만다라트 1')]);
+  const [activeSheetId, setActiveSheetId] = useState<string>('');
+  const [initialized, setInitialized] = useState(false);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [tabDraft, setTabDraft] = useState('');
+  const tabInputRef = useRef<HTMLInputElement>(null);
+
+  // 초기 로드
+  useEffect(() => {
+    const loaded = loadSheets();
+    setSheets(loaded);
+    setActiveSheetId(loaded[0]?.id || '');
+    setInitialized(true);
+  }, []);
+
+  // 자동 저장
+  useEffect(() => {
+    if (initialized) saveSheets(sheets);
+  }, [sheets, initialized]);
+
+  const activeSheet = sheets.find((s) => s.id === activeSheetId);
+  const grid = activeSheet?.grid || createEmptyGrid();
+
+  // 기존 goal 노드가 있고 첫 번째 시트가 비어있으면 자동 채우기
+  useEffect(() => {
+    if (!initialized || !activeSheet) return;
+    const goalNodes = sourceNodes.filter((n) => n.type !== 'group' && n.data.type === 'goal');
+    if (goalNodes.length === 0) return;
+    if (grid[4][4] !== '') return;
+
+    const newGrid = grid.map((r) => [...r]);
+    const mainGoal = goalNodes[0];
+    newGrid[4][4] = mainGoal.data.label;
+
+    const connectedIds = new Set<string>();
+    sourceEdges.forEach((e) => {
+      if (e.source === mainGoal.id) connectedIds.add(e.target);
+      if (e.target === mainGoal.id) connectedIds.add(e.source);
+    });
+    const connected = sourceNodes.filter(
+      (n) => connectedIds.has(n.id) && n.type !== 'group'
+    );
+
+    const subPositions: [number, number][] = [
+      [3, 3], [3, 4], [3, 5],
+      [4, 3],         [4, 5],
+      [5, 3], [5, 4], [5, 5],
+    ];
+    connected.slice(0, 8).forEach((node, i) => {
+      const [r, c] = subPositions[i];
+      newGrid[r][c] = node.data.label;
+    });
+
+    SUB_GOAL_MAP.forEach(([sr, sc, or, oc]) => {
+      if (newGrid[sr][sc]) newGrid[or][oc] = newGrid[sr][sc];
+    });
+
+    setSheets((prev) =>
+      prev.map((s) => (s.id === activeSheetId ? { ...s, grid: newGrid } : s))
+    );
+  }, [initialized, sourceNodes, sourceEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCellUpdate = useCallback((row: number, col: number, value: string) => {
+    setSheets((prev) =>
+      prev.map((s) => {
+        if (s.id !== activeSheetId) return s;
+        const newGrid = s.grid.map((r) => [...r]);
+        newGrid[row][col] = value;
+
+        // 서브 목표 ↔ 외곽 블록 중심 양방향 동기화
+        const subMapping = SUB_GOAL_MAP.find(([sr, sc]) => sr === row && sc === col);
+        if (subMapping) {
+          const [, , or, oc] = subMapping;
+          newGrid[or][oc] = value;
+        }
+        const outerMapping = SUB_GOAL_MAP.find(([, , or, oc]) => or === row && oc === col);
+        if (outerMapping) {
+          const [sr, sc] = outerMapping;
+          newGrid[sr][sc] = value;
+        }
+
+        return { ...s, grid: newGrid };
+      })
+    );
+  }, [activeSheetId]);
+
+  const handleAddSheet = useCallback(() => {
+    const newSheet = createSheet(`만다라트 ${sheets.length + 1}`);
+    setSheets((prev) => [...prev, newSheet]);
+    setActiveSheetId(newSheet.id);
+  }, [sheets.length]);
+
+  const handleDeleteSheet = useCallback((id: string) => {
+    if (sheets.length <= 1) return;
+    if (!confirm('이 만다라트를 삭제하시겠습니까?')) return;
+    setSheets((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      if (activeSheetId === id) {
+        setActiveSheetId(next[0]?.id || '');
+      }
+      return next;
+    });
+  }, [sheets.length, activeSheetId]);
+
+  const handleReset = useCallback(() => {
+    if (confirm('현재 만다라트를 초기화하시겠습니까? 모든 내용이 삭제됩니다.')) {
+      setSheets((prev) =>
+        prev.map((s) => (s.id === activeSheetId ? { ...s, grid: createEmptyGrid() } : s))
+      );
+    }
+  }, [activeSheetId]);
+
+  const handleRenameTab = useCallback((id: string) => {
+    setEditingTabId(id);
+    const sheet = sheets.find((s) => s.id === id);
+    setTabDraft(sheet?.title || '');
+    setTimeout(() => tabInputRef.current?.focus(), 0);
+  }, [sheets]);
+
+  const commitTabRename = useCallback(() => {
+    if (editingTabId && tabDraft.trim()) {
+      setSheets((prev) =>
+        prev.map((s) => (s.id === editingTabId ? { ...s, title: tabDraft.trim() } : s))
+      );
+    }
+    setEditingTabId(null);
+  }, [editingTabId, tabDraft]);
+
+  // 완성도 계산
+  const filledCount = useMemo(() => {
+    let count = 0;
+    grid.forEach((row) => row.forEach((cell) => { if (cell.trim()) count++; }));
+    return count;
+  }, [grid]);
+
+  return (
+    <div className="flex h-full w-full flex-col overflow-auto bg-[#F9FAFB]">
+      {/* 헤더: 탭 + 액션 */}
+      <div className="flex items-center justify-between border-b border-[#F2F4F6] bg-white px-4 py-0">
+        {/* 시트 탭 */}
+        <div className="flex items-center gap-0.5 overflow-x-auto">
+          {sheets.map((sheet) => (
+            <div
+              key={sheet.id}
+              className={cn(
+                'group relative flex items-center gap-1 border-b-2 px-4 py-2.5 text-[13px] font-medium transition-all duration-150 cursor-pointer',
+                activeSheetId === sheet.id
+                  ? 'border-[#3182F6] text-[#191F28]'
+                  : 'border-transparent text-[#8B95A1] hover:text-[#4E5968]',
+              )}
+              onClick={() => setActiveSheetId(sheet.id)}
+              onDoubleClick={() => handleRenameTab(sheet.id)}
+            >
+              {editingTabId === sheet.id ? (
+                <input
+                  ref={tabInputRef}
+                  className="w-20 border-b border-[#3182F6] bg-transparent text-center text-[13px] font-medium outline-none"
+                  value={tabDraft}
+                  onChange={(e) => setTabDraft(e.target.value)}
+                  onBlur={commitTabRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitTabRename();
+                    if (e.key === 'Escape') setEditingTabId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span>{sheet.title}</span>
+              )}
+              {sheets.length > 1 && activeSheetId === sheet.id && (
+                <button
+                  className="ml-1 hidden rounded p-0.5 text-[#B0B8C1] hover:bg-[#F2F4F6] hover:text-[#4E5968] group-hover:block"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSheet(sheet.id);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={handleAddSheet}
+            className="flex items-center gap-1 px-3 py-2.5 text-[#B0B8C1] transition-all duration-150 hover:text-[#4E5968]"
+            title="만다라트 추가"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* 확장 3x3 (선택 시) */}
-        {expandedGrid && (
-          <div className="flex flex-col items-center">
-            <span className="mb-2 text-xs font-medium text-gray-400">
-              세부 연결
-            </span>
-            <div className="grid grid-cols-3 gap-1.5">
-              {expandedGrid.map((item, index) => {
-                const isCenter = index === 4;
-                return (
-                  <div
-                    key={index}
-                    className={cn(
-                      'flex h-20 w-20 flex-col items-center justify-center rounded-lg border p-1 text-center',
-                      isCenter
-                        ? 'border-blue-400 bg-blue-50'
-                        : item
-                        ? 'border-gray-200 bg-white'
-                        : 'border-dashed border-gray-100 bg-gray-50/30'
-                    )}
-                  >
-                    {item ? (
-                      <>
-                        <span className="text-sm">{item.data.icon}</span>
-                        <span
-                          className="mt-0.5 text-[10px] font-medium leading-tight"
-                          style={{ color: item.data.color }}
-                        >
-                          {item.data.label}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[9px] text-gray-200">-</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* 우측 정보 + 초기화 */}
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-[#8B95A1]">
+            {filledCount}/81 ({Math.round((filledCount / 81) * 100)}%)
+          </span>
+          <button
+            onClick={handleReset}
+            className="rounded-xl border border-[#E5E8EB] px-3 py-1 text-[12px] font-medium text-[#8B95A1] transition-all duration-150 hover:border-[#D1D6DB] hover:text-[#4E5968]"
+          >
+            초기화
+          </button>
+        </div>
       </div>
 
-      {/* 목표가 없을 때 안내 */}
-      {goalNodes.length === 0 && (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-center text-gray-400">
-            <span className="text-4xl">🎯</span>
-            <p className="mt-3 text-sm">목표 노드를 추가하면 만다라트가 생성됩니다</p>
-            <p className="mt-1 text-xs">캔버스 뷰에서 목표(Goal) 노드를 추가해보세요</p>
-          </div>
+      {/* 9x9 그리드 */}
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="rounded-2xl border border-[#E5E8EB] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] overflow-hidden">
+          <table className="mandalart-grid border-collapse">
+            <tbody>
+              {grid.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  {row.map((cell, colIdx) => (
+                    <MandalartCell
+                      key={`${activeSheetId}-${rowIdx}-${colIdx}`}
+                      value={cell}
+                      row={rowIdx}
+                      col={colIdx}
+                      onUpdate={handleCellUpdate}
+                    />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
+
+      {/* 사용법 안내 */}
+      <div className="border-t border-[#F2F4F6] bg-white px-6 py-2.5">
+        <p className="text-[11px] text-[#B0B8C1]">
+          셀 클릭으로 입력 · 중앙 서브 목표 ↔ 외곽 블록 중심 자동 동기화 · 탭 더블클릭으로 이름 변경 · + 버튼으로 새 만다라트 추가
+        </p>
+      </div>
     </div>
   );
 }

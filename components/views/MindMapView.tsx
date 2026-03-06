@@ -244,13 +244,33 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<LifeMapNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LifeMapEdgeData>>([]);
 
-  // 레이아웃 변경 시 동기화
+  // 구조 변경 시그니처 — 노드/에지 ID 목록이 바뀔 때만 레이아웃 재계산
+  const structureKey = useMemo(() => {
+    const nodeIds = regularNodes.map((n) => n.id).sort().join(',');
+    const edgeIds = sourceEdges.map((e) => `${e.source}-${e.target}`).sort().join(',');
+    return `${nodeIds}|${edgeIds}`;
+  }, [regularNodes, sourceEdges]);
+
+  // 레이아웃 변경 시 동기화 (구조 변경 또는 방향/접기 변경 시만)
   useEffect(() => {
     if (!centerNodeId) return;
     const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds);
     setNodes(result.nodes);
     setEdges(result.edges);
-  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, setNodes, setEdges]);
+  }, [structureKey, centerNodeId, direction, collapsedIds, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 데이터 변경(라벨 등)은 레이아웃 없이 노드 데이터만 갱신
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((node) => {
+        const source = regularNodes.find((n) => n.id === node.id);
+        if (source && source.data.label !== node.data.label) {
+          return { ...node, data: { ...node.data, label: source.data.label } };
+        }
+        return node;
+      })
+    );
+  }, [regularNodes, setNodes]);
 
   const addChild = useCallback((parentId: string) => {
     const id = nanoid();
@@ -323,6 +343,9 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!selectedNodeId) return;
+    // 인풋/텍스트에리어 편집 중이면 단축키 무시 (입력 팅김 방지)
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.key === 'Tab') { e.preventDefault(); addChild(selectedNodeId); }
     else if (e.key === 'Enter') { e.preventDefault(); addSibling(selectedNodeId); }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteNode(selectedNodeId); }
@@ -334,7 +357,10 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   );
 
   const onNodeDoubleClick = useCallback(
-    (_evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
+    (evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
+      // 인풋/텍스트에리어에서 더블클릭 시 접기 동작 무시 (편집 모드 보호)
+      const tag = (evt.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SPAN') return;
       setCollapsedIds((prev) => {
         const next = new Set(prev);
         if (next.has(node.id)) next.delete(node.id);

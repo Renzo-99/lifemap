@@ -23,8 +23,8 @@ export function ConnectionToolbar({
   onToggleConnectMode,
 }: ConnectionToolbarProps) {
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-white/95 px-2 py-1.5 shadow-lg border border-gray-200 backdrop-blur-sm">
-      <span className="mr-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">연결:</span>
+    <div className="flex items-center gap-1 rounded-2xl bg-white/95 px-2 py-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-[#F2F4F6] backdrop-blur-sm">
+      <span className="mr-1 text-[10px] font-medium text-[#B0B8C1] uppercase tracking-wider">연결:</span>
       {RELATION_TYPES.map((type) => {
         const style = RELATIONSHIP_STYLES[type];
         const isActive = activeRelationType === type;
@@ -33,10 +33,10 @@ export function ConnectionToolbar({
             key={type}
             onClick={() => onChangeRelationType(type)}
             className={cn(
-              'rounded-lg px-2 py-1 text-[11px] font-medium transition-all',
+              'rounded-xl px-2 py-1 text-[11px] font-medium transition-all duration-150',
               isActive
                 ? 'shadow-sm ring-1'
-                : 'text-gray-500 hover:bg-gray-50'
+                : 'text-[#8B95A1] hover:bg-[#F9FAFB]'
             )}
             style={isActive ? {
               backgroundColor: style.color + '15',

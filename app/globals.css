@@ -91,6 +91,7 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  letter-spacing: -0.01em;
   overflow: hidden;
 }
 
@@ -113,20 +114,40 @@ body {
 }
 
 .react-flow__controls {
-  border-radius: 8px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #F2F4F6 !important;
 }
 
 .react-flow__controls-button {
   border: none !important;
   background: white !important;
+  transition: all 0.15s ease !important;
 }
 
 .react-flow__controls-button:hover {
-  background: hsl(var(--secondary)) !important;
+  background: #F2F4F6 !important;
 }
 
 .react-flow__minimap {
-  border-radius: 8px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #F2F4F6 !important;
+}
+
+/* 만다라트 그리드 — 3x3 블록 구분선 */
+.mandalart-grid td {
+  border: 1px solid #E5E8EB;
+}
+
+.mandalart-grid tr:nth-child(3) td,
+.mandalart-grid tr:nth-child(6) td {
+  border-bottom: 2.5px solid #3182F6;
+}
+
+.mandalart-grid td:nth-child(3),
+.mandalart-grid td:nth-child(6) {
+  border-right: 2.5px solid #3182F6;
 }
 
 /* Sonner 토스트 — Toss 스타일 오버라이드 */
