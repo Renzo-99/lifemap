@@ -12,8 +12,6 @@ import {
   useEdgesState,
   type Node,
   type Edge,
-  type NodeTypes,
-  type EdgeTypes,
 } from '@xyflow/react';
 import {
   forceSimulation,
@@ -26,25 +24,10 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from 'd3-force';
-import { PersonNode } from '@/components/nodes/PersonNode';
-import { OrganizationNode } from '@/components/nodes/OrganizationNode';
-import { ActivityNode } from '@/components/nodes/ActivityNode';
-import { GoalNode } from '@/components/nodes/GoalNode';
-import { RelationshipEdge } from '@/components/edges/RelationshipEdge';
+import { canvasNodeTypes, canvasEdgeTypes } from '@/lib/flow-types';
 import type { LifeMapNodeData, LifeMapEdgeData, RelationshipType, NodeType } from '@/types';
 import { RELATIONSHIP_TYPE_LABELS, NODE_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-
-const nodeTypes: NodeTypes = {
-  person: PersonNode,
-  organization: OrganizationNode,
-  activity: ActivityNode,
-  goal: GoalNode,
-};
-
-const edgeTypes: EdgeTypes = {
-  relationship: RelationshipEdge,
-};
 
 interface GraphViewProps {
   sourceNodes: Node<LifeMapNodeData>[];
@@ -197,8 +180,8 @@ export function GraphView({ sourceNodes, sourceEdges }: GraphViewProps) {
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
         onNodeDoubleClick={onNodeDoubleClick}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodeTypes={canvasNodeTypes}
+        edgeTypes={canvasEdgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={3}

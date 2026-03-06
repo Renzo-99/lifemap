@@ -1,55 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import type { SaveState } from '@/hooks/useAutoSave';
 
-const STORAGE_KEY = 'lifemap-autosave';
+export type { SaveState };
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-/**
- * 자동저장 훅 — 토스트 없이, 상태만 반환
- */
-export function useAutoSave(data: { nodes: unknown[]; edges: unknown[] }) {
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFirstRender = useRef(true);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    setSaveState('saving');
-
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ ...data, savedAt: new Date().toISOString() })
-        );
-        setSaveState('saved');
-      } catch {
-        setSaveState('error');
-      }
-    }, 1000);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [data]);
-
-  return { saveState };
-}
-
-/**
- * 신호등 스타일 저장 상태 인디케이터
- * - idle: 회색 dot
- * - saving: 노란 dot (깜빡임)
- * - saved: 초록 dot
- * - error: 빨간 dot
- */
 export function SaveIndicator({ state }: { state: SaveState }) {
   const colors: Record<SaveState, string> = {
     idle: 'bg-[#D1D6DB]',

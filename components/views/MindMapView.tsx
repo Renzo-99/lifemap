@@ -16,10 +16,10 @@ import {
   type NodeTypes,
   type EdgeTypes,
 } from '@xyflow/react';
-import dagre from 'dagre';
 import { nanoid } from 'nanoid';
 import { MindMapNode } from '@/components/nodes/MindMapNode';
 import { MindMapEdge } from '@/components/edges/MindMapEdge';
+import { findCenterNodeId, buildTree, getLayoutedElements, type LayoutDirection } from '@/lib/mindmap-utils';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -33,192 +33,11 @@ const edgeTypes: EdgeTypes = {
   default: MindMapEdge,
 };
 
-const BRANCH_COLORS = [
-  '#3182F6', '#8B5CF6', '#10B981', '#F97316', '#EF4444',
-  '#EC4899', '#06B6D4', '#84CC16', '#F59E0B', '#6366F1',
-];
-
 interface MindMapViewProps {
   sourceNodes: Node<LifeMapNodeData>[];
   sourceEdges: Edge<LifeMapEdgeData>[];
   onNodesChange: React.Dispatch<React.SetStateAction<Node<LifeMapNodeData>[]>>;
   onEdgesChange: React.Dispatch<React.SetStateAction<Edge<LifeMapEdgeData>[]>>;
-}
-
-function findCenterNodeId(
-  nodes: Node<LifeMapNodeData>[],
-  edges: Edge<LifeMapEdgeData>[]
-): string | null {
-  const meNode = nodes.find((n) => n.data.label.includes('나'));
-  if (meNode) return meNode.id;
-
-  const counts = new Map<string, number>();
-  for (const n of nodes) counts.set(n.id, 0);
-  for (const e of edges) {
-    counts.set(e.source, (counts.get(e.source) || 0) + 1);
-    counts.set(e.target, (counts.get(e.target) || 0) + 1);
-  }
-  let maxId: string | null = null;
-  let maxCount = -1;
-  for (const [id, count] of counts) {
-    if (count > maxCount) { maxCount = count; maxId = id; }
-  }
-  return maxId;
-}
-
-function buildTree(
-  nodes: Node<LifeMapNodeData>[],
-  edges: Edge<LifeMapEdgeData>[],
-  centerId: string
-) {
-  const adjacency = new Map<string, Set<string>>();
-  for (const e of edges) {
-    if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
-    if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
-    adjacency.get(e.source)!.add(e.target);
-    adjacency.get(e.target)!.add(e.source);
-  }
-
-  const depthMap = new Map<string, number>();
-  const parentMap = new Map<string, string>();
-  const childrenMap = new Map<string, string[]>();
-  const visited = new Set<string>();
-  const queue: string[] = [centerId];
-  visited.add(centerId);
-  depthMap.set(centerId, 0);
-
-  const directedEdges: Edge<LifeMapEdgeData>[] = [];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const neighbors = adjacency.get(current) || new Set();
-    for (const neighbor of neighbors) {
-      if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
-        depthMap.set(neighbor, (depthMap.get(current) || 0) + 1);
-        parentMap.set(neighbor, current);
-        if (!childrenMap.has(current)) childrenMap.set(current, []);
-        childrenMap.get(current)!.push(neighbor);
-
-        const edge = edges.find(
-          (e) => (e.source === current && e.target === neighbor) ||
-                 (e.source === neighbor && e.target === current)
-        );
-        if (edge) {
-          directedEdges.push({ ...edge, source: current, target: neighbor });
-        }
-      }
-    }
-  }
-
-  for (const e of edges) {
-    if (!directedEdges.find((d) => d.id === e.id)) {
-      directedEdges.push(e);
-    }
-  }
-
-  return { depthMap, parentMap, childrenMap, directedEdges };
-}
-
-function getLayoutedElements(
-  nodes: Node<LifeMapNodeData>[],
-  edges: Edge<LifeMapEdgeData>[],
-  centerId: string,
-  direction: 'LR' | 'TB' | 'RL',
-  collapsedIds: Set<string>
-) {
-  const { depthMap, parentMap, childrenMap, directedEdges } = buildTree(nodes, edges, centerId);
-
-  const hiddenIds = new Set<string>();
-  function hideChildren(nodeId: string) {
-    const children = childrenMap.get(nodeId) || [];
-    for (const child of children) {
-      hiddenIds.add(child);
-      hideChildren(child);
-    }
-  }
-  for (const cid of collapsedIds) hideChildren(cid);
-
-  const visibleNodes = nodes.filter((n) => !hiddenIds.has(n.id));
-  const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
-  const visibleEdges = directedEdges.filter(
-    (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
-  );
-
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 30, ranksep: 160, marginx: 40, marginy: 40 });
-
-  visibleNodes.forEach((node) => {
-    const depth = depthMap.get(node.id) || 0;
-    const labelLen = node.data.label?.length || 4;
-    const baseW = depth === 0 ? 160 : depth === 1 ? 140 : 120;
-    const w = Math.max(baseW, labelLen * 14 + 60);
-    const h = depth === 0 ? 50 : depth === 1 ? 44 : 36;
-    g.setNode(node.id, { width: w, height: h });
-  });
-  visibleEdges.forEach((edge) => g.setEdge(edge.source, edge.target));
-  dagre.layout(g);
-
-  const branchColorMap = new Map<string, string>();
-  const centerChildren = childrenMap.get(centerId) || [];
-  centerChildren.forEach((childId, i) => {
-    branchColorMap.set(childId, BRANCH_COLORS[i % BRANCH_COLORS.length]);
-  });
-
-  function getBranchColor(nodeId: string): string {
-    if (nodeId === centerId) return BRANCH_COLORS[0];
-    if (branchColorMap.has(nodeId)) return branchColorMap.get(nodeId)!;
-    const parent = parentMap.get(nodeId);
-    if (parent) {
-      const color = getBranchColor(parent);
-      branchColorMap.set(nodeId, color);
-      return color;
-    }
-    return '#6B7280';
-  }
-
-  // 방향에 따라 핸들 위치
-  const sourceHandlePos = direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom';
-  const targetHandlePos = direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top';
-
-  const layoutedNodes: Node<LifeMapNodeData>[] = visibleNodes.map((node) => {
-    const pos = g.node(node.id);
-    const depth = depthMap.get(node.id) || 0;
-    const isCenter = node.id === centerId;
-    const isCollapsed = collapsedIds.has(node.id);
-    const childCount = childrenMap.get(node.id)?.length || 0;
-    const color = getBranchColor(node.id);
-
-    return {
-      ...node,
-      type: 'mindmap',
-      position: { x: pos.x - (pos.width || 160) / 2, y: pos.y - (pos.height || 50) / 2 },
-      data: {
-        ...node.data,
-        color,
-        _isCenter: isCenter,
-        _isCollapsed: isCollapsed,
-        _childCount: childCount,
-        _depth: depth,
-        _direction: direction,
-      } as LifeMapNodeData,
-    };
-  });
-
-  const layoutedEdges: Edge<LifeMapEdgeData>[] = visibleEdges.map((edge) => {
-    const edgeColor = getBranchColor(edge.target);
-    return {
-      ...edge,
-      type: 'relationship',
-      sourceHandle: sourceHandlePos,
-      targetHandle: targetHandlePos,
-      data: { ...edge.data, color: edgeColor } as LifeMapEdgeData,
-    };
-  });
-
-  return { nodes: layoutedNodes, edges: layoutedEdges };
 }
 
 // 내부 컴포넌트 (자체 ReactFlowProvider 스코프)
@@ -230,7 +49,7 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
     [sourceNodes]
   );
 
-  const [direction, setDirection] = useState<'LR' | 'TB' | 'RL'>('LR');
+  const [direction, setDirection] = useState<LayoutDirection>('HORIZONTAL');
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -409,7 +228,7 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
         <Panel position="top-center">
           <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg border border-gray-200 backdrop-blur-sm">
             <span className="text-[10px] font-medium text-gray-400">레이아웃:</span>
-            {(['LR', 'TB', 'RL'] as const).map((dir) => (
+            {(['HORIZONTAL', 'LR', 'TB', 'RL'] as LayoutDirection[]).map((dir) => (
               <button
                 key={dir}
                 onClick={() => setDirection(dir)}
@@ -420,7 +239,7 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
                     : 'text-gray-500 hover:bg-gray-100'
                 )}
               >
-                {dir === 'LR' ? '좌→우' : dir === 'TB' ? '위→아래' : '우→좌'}
+                {{ HORIZONTAL: '좌←중→우', LR: '좌→우', TB: '위→아래', RL: '우→좌' }[dir]}
               </button>
             ))}
 
