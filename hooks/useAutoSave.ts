@@ -11,11 +11,15 @@ export function useAutoSave(data: { nodes: unknown[]; edges: unknown[] }) {
   const isFirstRender = useRef(true);
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
-  // 데이터 참조 안정화: 길이가 같고 ID 목록이 같으면 같은 참조 유지
+  // 데이터 참조 안정화: 내용이 실질적으로 바뀔 때만 저장 트리거
   const stableKey = useMemo(() => {
-    const nodeIds = (data.nodes as { id?: string }[]).map((n) => n.id || '').join(',');
-    const edgeIds = (data.edges as { id?: string }[]).map((e) => e.id || '').join(',');
-    return `${nodeIds}|${edgeIds}|${data.nodes.length}|${data.edges.length}`;
+    const nodeKey = (data.nodes as { id?: string; position?: { x: number; y: number }; data?: { label?: string } }[])
+      .map((n) => `${n.id}:${n.position?.x?.toFixed(0)},${n.position?.y?.toFixed(0)}:${n.data?.label || ''}`)
+      .join('|');
+    const edgeKey = (data.edges as { id?: string; source?: string; target?: string; data?: { label?: string } }[])
+      .map((e) => `${e.id}:${e.source}-${e.target}:${e.data?.label || ''}`)
+      .join('|');
+    return `${nodeKey}||${edgeKey}`;
   }, [data.nodes, data.edges]);
 
   useEffect(() => {
