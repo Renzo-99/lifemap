@@ -38,6 +38,7 @@ import { SaveIndicator } from '@/components/ui/save-status-toast';
 import type { NodeType, LifeMapNodeData, LifeMapEdgeData, RelationshipType } from '@/types';
 
 import { nanoid } from 'nanoid';
+import { exportToFile, importFromFile, createBackup, getBackups, restoreBackup, deleteBackup } from '@/lib/file-save';
 
 
 function LifeMapCanvasInner() {
@@ -170,9 +171,49 @@ function LifeMapCanvasInner() {
   const edgeCount = edges.length;
   const groupCount = nodes.filter((n) => n.type === 'group').length;
 
+  // 파일 저장/불러오기/백업
+  const [backups, setBackups] = useState(() => getBackups().map(({ data: _, ...rest }) => rest));
+
+  const handleExport = useCallback(() => exportToFile(nodes, edges), [nodes, edges]);
+
+  const handleImport = useCallback(async () => {
+    try {
+      const data = await importFromFile();
+      setNodes(data.nodes);
+      setEdges(data.edges);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '불러오기 실패');
+    }
+  }, [setNodes, setEdges]);
+
+  const handleBackup = useCallback(() => {
+    createBackup(nodes, edges);
+    setBackups(getBackups().map(({ data: _, ...rest }) => rest));
+  }, [nodes, edges]);
+
+  const handleRestoreBackup = useCallback((id: string) => {
+    const data = restoreBackup(id);
+    if (data) {
+      setNodes(data.nodes);
+      setEdges(data.edges);
+    }
+  }, [setNodes, setEdges]);
+
+  const handleDeleteBackup = useCallback((id: string) => {
+    deleteBackup(id);
+    setBackups(getBackups().map(({ data: _, ...rest }) => rest));
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col bg-gray-50">
-      <TopBar />
+      <TopBar
+        onExport={handleExport}
+        onImport={handleImport}
+        onBackup={handleBackup}
+        onRestoreBackup={handleRestoreBackup}
+        onDeleteBackup={handleDeleteBackup}
+        backups={backups}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* 캔버스 뷰일 때만 사이드바 표시 */}
