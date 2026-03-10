@@ -144,6 +144,20 @@ function createBranchColorResolver(
   };
 }
 
+// 깊이별 최대 노드 폭 계산 (같은 깊이의 노드를 동일 폭으로 정렬)
+function computeMaxWidthPerDepth(
+  nodes: Node<LifeMapNodeData>[],
+  depthMap: Map<string, number>
+): Map<number, number> {
+  const maxWidthPerDepth = new Map<number, number>();
+  nodes.forEach((node) => {
+    const depth = depthMap.get(node.id) || 0;
+    const { w } = getNodeSize(depth, node.data.label);
+    maxWidthPerDepth.set(depth, Math.max(maxWidthPerDepth.get(depth) || 0, w));
+  });
+  return maxWidthPerDepth;
+}
+
 // dagre 실행 유틸
 function runDagre(
   nodes: Node<LifeMapNodeData>[],
@@ -153,11 +167,15 @@ function runDagre(
 ): Map<string, { x: number; y: number; width: number; height: number }> {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 30, ranksep: 160, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 160, marginx: 40, marginy: 40 });
+
+  // 같은 깊이의 노드는 동일 폭을 사용하여 핸들 위치 정렬
+  const maxWidthPerDepth = computeMaxWidthPerDepth(nodes, depthMap);
 
   nodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const { w, h } = getNodeSize(depth, node.data.label);
+    const { h } = getNodeSize(depth, node.data.label);
+    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node.data.label).w;
     g.setNode(node.id, { width: w, height: h });
   });
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
@@ -200,11 +218,15 @@ export function getLayoutedElements(
   // 단방향 레이아웃
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 30, ranksep: 160, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 160, marginx: 40, marginy: 40 });
+
+  // 같은 깊이의 노드는 동일 폭으로 정렬
+  const maxWidthPerDepth = computeMaxWidthPerDepth(visibleNodes, depthMap);
 
   visibleNodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const { w, h } = getNodeSize(depth, node.data.label);
+    const { h } = getNodeSize(depth, node.data.label);
+    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node.data.label).w;
     g.setNode(node.id, { width: w, height: h });
   });
   visibleEdges.forEach((edge) => g.setEdge(edge.source, edge.target));
