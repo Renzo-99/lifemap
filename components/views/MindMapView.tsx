@@ -78,6 +78,43 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<LifeMapNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LifeMapEdgeData>>([]);
 
+  // 중심 노드 자식들의 좌/우 배치 자동 초기화 및 유지
+  // 새 자식이 추가되면 기존 배치를 유지하면서 새 자식만 균형 맞춰 배치
+  useEffect(() => {
+    if (!centerNodeId || regularNodes.length === 0) return;
+    const { childrenMap } = buildTree(regularNodes, sourceEdges, centerNodeId);
+    const centerChildren = childrenMap.get(centerNodeId) || [];
+    if (centerChildren.length === 0) return;
+
+    setSideOverrides((prev) => {
+      const newChildren = centerChildren.filter((id) => !prev.has(id));
+      if (newChildren.length === 0 && prev.size >= centerChildren.length) return prev;
+
+      const next = new Map(prev);
+      // 삭제된 노드 제거
+      const childSet = new Set(centerChildren);
+      for (const key of next.keys()) {
+        if (!childSet.has(key)) next.delete(key);
+      }
+
+      if (next.size === 0) {
+        // 최초 배치: 인덱스 기반 반분할
+        const half = Math.ceil(centerChildren.length / 2);
+        centerChildren.forEach((id, i) => {
+          next.set(id, i < half ? 'right' : 'left');
+        });
+      } else {
+        // 새 자식만 추가: 적은 쪽에 배치
+        for (const id of newChildren) {
+          const rightCount = [...next.values()].filter((v) => v === 'right').length;
+          const leftCount = [...next.values()].filter((v) => v === 'left').length;
+          next.set(id, rightCount <= leftCount ? 'right' : 'left');
+        }
+      }
+      return next;
+    });
+  }, [structureKey, centerNodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 레이아웃 재계산: 구조 변경(노드 추가/삭제), 방향 변경, 접기 상태 변경 시만 실행
   useEffect(() => {
     if (!centerNodeId || regularNodes.length === 0) return;
