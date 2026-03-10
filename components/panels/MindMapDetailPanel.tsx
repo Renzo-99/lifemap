@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { X, Star, Tag, Calendar } from 'lucide-react';
 import type { Node, Edge } from '@xyflow/react';
 import type { LifeMapNodeData, LifeMapEdgeData, NodeStatus } from '@/types';
@@ -11,6 +12,68 @@ const STATUS_OPTIONS: { value: NodeStatus; label: string; color: string }[] = [
   { value: 'hold', label: '보류', color: 'bg-amber-100 text-amber-600 border-amber-200' },
   { value: 'none', label: '미분류', color: 'bg-gray-100 text-gray-500 border-gray-200' },
 ];
+
+// 메모 입력: 로컬 상태 + blur 시 반영
+function MemoInput({ memo, onCommit }: { memo: string; onCommit: (val: string) => void }) {
+  const [value, setValue] = useState(memo);
+
+  useEffect(() => {
+    setValue(memo);
+  }, [memo]);
+
+  return (
+    <div className="border-b border-[#F2F4F6] px-4 py-3">
+      <div className="mb-2 text-xs font-medium text-[#8B95A1]">메모</div>
+      <textarea
+        className="w-full resize-none rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] p-3 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
+        rows={5}
+        placeholder="메모를 입력하세요..."
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => { if (value !== memo) onCommit(value); }}
+      />
+    </div>
+  );
+}
+
+// 로컬 상태로 입력을 관리하고 blur/Enter 시에만 부모에 반영
+function NameInput({ label, onCommit }: { label: string; onCommit: (val: string) => void }) {
+  const [value, setValue] = useState(label);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 외부에서 label이 바뀌면 (다른 노드 선택 등) 동기화
+  useEffect(() => {
+    setValue(label);
+  }, [label]);
+
+  const commit = () => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== label) {
+      onCommit(trimmed);
+    } else {
+      setValue(label); // 빈 값이면 원래 값 복원
+    }
+  };
+
+  return (
+    <div className="border-b border-[#F2F4F6] px-4 py-3">
+      <div className="mb-1 text-xs font-medium text-[#8B95A1]">이름</div>
+      <input
+        ref={inputRef}
+        className="w-full rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] px-2.5 py-1.5 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            inputRef.current?.blur();
+          }
+        }}
+      />
+    </div>
+  );
+}
 
 interface MindMapDetailPanelProps {
   selectedNodeId: string | null;
@@ -126,14 +189,7 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
         </div>
 
         {/* 이름 수정 */}
-        <div className="border-b border-[#F2F4F6] px-4 py-3">
-          <div className="mb-1 text-xs font-medium text-[#8B95A1]">이름</div>
-          <input
-            className="w-full rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] px-2.5 py-1.5 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
-            value={data.label}
-            onChange={(e) => update({ label: e.target.value })}
-          />
-        </div>
+        <NameInput label={data.label} onCommit={(val) => update({ label: val })} />
 
         {/* 태그 */}
         <div className="border-b border-[#F2F4F6] px-4 py-3">
@@ -169,16 +225,7 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
         </div>
 
         {/* 메모 */}
-        <div className="border-b border-[#F2F4F6] px-4 py-3">
-          <div className="mb-2 text-xs font-medium text-[#8B95A1]">메모</div>
-          <textarea
-            className="w-full resize-none rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] p-3 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
-            rows={5}
-            placeholder="메모를 입력하세요..."
-            value={data.memo}
-            onChange={(e) => update({ memo: e.target.value })}
-          />
-        </div>
+        <MemoInput memo={data.memo} onCommit={(val) => update({ memo: val })} />
 
         {/* 연결 노드 */}
         {connectedNodes.length > 0 && (
