@@ -5,6 +5,8 @@ export type NodeType = 'person' | 'organization' | 'activity' | 'goal';
 
 export type NodeShape = 'rounded-rect' | 'circle' | 'diamond' | 'hexagon';
 
+export type NodeStatus = 'active' | 'done' | 'hold' | 'none';
+
 export type MandalartLevel = 'core' | 'sub' | 'action';
 
 export interface MandalartData {
@@ -23,6 +25,8 @@ export type LifeMapNodeData = {
   shape: NodeShape;
   memo: string;
   tags: string[];
+  importance?: number; // 1~5 별표 중요도
+  status?: NodeStatus; // 'active' | 'done' | 'hold' | 'none'
   createdAt: string;
   updatedAt: string;
   mandalart?: MandalartData;

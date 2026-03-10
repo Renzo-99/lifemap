@@ -2,13 +2,30 @@
 
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps, type Node } from '@xyflow/react';
-import type { LifeMapNodeData } from '@/types';
+import type { LifeMapNodeData, NodeStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
 type MindMapNodeType = Node<LifeMapNodeData, 'mindmap'>;
 
 // 투명 핸들 (트리 커넥터에서는 핸들 점이 보이면 안 됨)
 const HANDLE_HIDDEN = '!w-1 !h-1 !bg-transparent !border-transparent !min-w-0 !min-h-0';
+
+const STATUS_BADGE: Record<NodeStatus, { label: string; bg: string; text: string } | null> = {
+  none: null,
+  active: null,
+  done: { label: '완료', bg: 'bg-green-100', text: 'text-green-600' },
+  hold: { label: '보류', bg: 'bg-amber-100', text: 'text-amber-600' },
+};
+
+function StarRating({ count, size = 'sm' }: { count: number; size?: 'sm' | 'xs' }) {
+  if (!count || count <= 0) return null;
+  const starSize = size === 'sm' ? 'text-[11px]' : 'text-[9px]';
+  return (
+    <span className={cn('flex-shrink-0 text-amber-400', starSize)} title={`중요도 ${count}`}>
+      {'★'.repeat(Math.min(count, 5))}
+    </span>
+  );
+}
 
 function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>) {
   const [isEditing, setIsEditing] = useState(false);
@@ -21,6 +38,12 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
   const depth = (data as any)._depth || 0;
   const direction = (data as any)._direction || 'LR';
   const isLeft = direction === 'RL';
+
+  const importance = data.importance || 0;
+  const status: NodeStatus = data.status || 'none';
+  const isDone = status === 'done';
+  const isHold = status === 'hold';
+  const badge = STATUS_BADGE[status];
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -54,6 +77,13 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
       depth >= 2 && 'bg-gray-100 px-1 text-[9px] text-gray-400',
     )}>
       +{childCount}
+    </span>
+  );
+
+  // 상태 배지
+  const statusBadge = badge && (
+    <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-medium', badge.bg, badge.text)}>
+      {badge.label}
     </span>
   );
 
@@ -98,13 +128,15 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
     );
   }
 
-  // 1차 가지 (depth 1) — isLeft이면 flex-row-reverse로 도트/텍스트 방향 반전
+  // 1차 가지 (depth 1)
   if (depth === 1) {
     return (
       <div
         className={cn(
           'flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 shadow-sm transition-all',
           isLeft && 'flex-row-reverse',
+          isDone && 'opacity-60',
+          isHold && 'opacity-75 border-dashed',
           selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
         )}
         onDoubleClick={handleDoubleClick}
@@ -115,22 +147,30 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
         {isEditing ? (
           editInput(cn('text-sm font-semibold text-gray-800', isLeft && 'text-right'))
         ) : (
-          <span className={cn('text-sm font-semibold text-gray-800 whitespace-nowrap', isLeft && 'text-right')}>
+          <span className={cn(
+            'text-sm font-semibold text-gray-800 whitespace-nowrap',
+            isLeft && 'text-right',
+            isDone && 'line-through text-gray-400',
+          )}>
             {data.label}
           </span>
         )}
 
+        <StarRating count={importance} size="sm" />
+        {statusBadge}
         {collapsedBadge}
       </div>
     );
   }
 
-  // 2차+ 가지 (depth 2+) — isLeft이면 flex-row-reverse
+  // 2차+ 가지 (depth 2+)
   return (
     <div
       className={cn(
         'flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 transition-all',
         isLeft && 'flex-row-reverse',
+        isDone && 'opacity-60',
+        isHold && 'opacity-75 border-dashed',
         selected ? 'border-blue-400 shadow-sm ring-1 ring-blue-200' : 'border-gray-150 hover:border-gray-300'
       )}
       onDoubleClick={handleDoubleClick}
@@ -139,11 +179,17 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
       {isEditing ? (
         editInput(cn('text-xs text-gray-700', isLeft && 'text-right'))
       ) : (
-        <span className={cn('text-xs text-gray-700 whitespace-nowrap', isLeft && 'text-right')}>
+        <span className={cn(
+          'text-xs text-gray-700 whitespace-nowrap',
+          isLeft && 'text-right',
+          isDone && 'line-through text-gray-400',
+        )}>
           {data.label}
         </span>
       )}
 
+      <StarRating count={importance} size="xs" />
+      {statusBadge}
       {collapsedBadge}
     </div>
   );

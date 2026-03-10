@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,6 +11,7 @@ import {
   Panel,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
   type NodeTypes,
@@ -22,6 +23,7 @@ import { MindMapEdge } from '@/components/edges/MindMapEdge';
 import { findCenterNodeId, buildTree, getLayoutedElements, type LayoutDirection } from '@/lib/mindmap-utils';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 import { cn } from '@/lib/utils';
+import { MindMapDetailPanel } from '@/components/panels/MindMapDetailPanel';
 
 const nodeTypes: NodeTypes = {
   mindmap: MindMapNode,
@@ -53,8 +55,17 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   // 중심 노드 자식별 좌/우 오버라이드 (드래그로 변경)
   const [sideOverrides, setSideOverrides] = useState<Map<string, 'left' | 'right'>>(new Map());
+
+  // 레이아웃 재계산을 트리거하는 구조적 변경 추적용
+  // (노드 추가/삭제/구조 변경만 레이아웃 재실행, 데이터 수정은 제외)
+  const structureKey = useMemo(() => {
+    const nodeIds = regularNodes.map((n) => n.id).sort().join(',');
+    const edgeIds = sourceEdges.map((e) => `${e.source}-${e.target}`).sort().join(',');
+    return `${nodeIds}|${edgeIds}`;
+  }, [regularNodes, sourceEdges]);
 
   useEffect(() => {
     // 중심 노드가 없거나, 현재 중심 노드가 노드 목록에서 삭제된 경우 재탐색
@@ -67,25 +78,48 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<LifeMapNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LifeMapEdgeData>>([]);
 
-  // 레이아웃 변경 시 동기화
+  // 레이아웃 재계산: 구조 변경(노드 추가/삭제), 방향 변경, 접기 상태 변경 시만 실행
   useEffect(() => {
     if (!centerNodeId || regularNodes.length === 0) return;
     const result = getLayoutedElements(regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides);
     setNodes(result.nodes);
     setEdges(result.edges);
-  }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [structureKey, centerNodeId, direction, collapsedIds, sideOverrides, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 데이터 변경(라벨 등)은 레이아웃 없이 노드 데이터만 갱신
+  // 원본 → 내부 데이터 동기화 (레이아웃 변경 없이 데이터만 갱신)
+  // label, importance, status, memo, tags 등 모든 데이터 필드를 동기화
   useEffect(() => {
-    setNodes((prev) =>
-      prev.map((node) => {
+    setNodes((prev) => {
+      let changed = false;
+      const next = prev.map((node) => {
         const source = regularNodes.find((n) => n.id === node.id);
-        if (source && source.data.label !== node.data.label) {
-          return { ...node, data: { ...node.data, label: source.data.label } };
+        if (!source) return node;
+        const s = source.data;
+        const d = node.data;
+        if (
+          s.label !== d.label ||
+          s.importance !== d.importance ||
+          s.status !== d.status ||
+          s.memo !== d.memo ||
+          s.tags !== d.tags
+        ) {
+          changed = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              label: s.label,
+              importance: s.importance,
+              status: s.status,
+              memo: s.memo,
+              tags: s.tags,
+            },
+          };
         }
         return node;
-      })
-    );
+      });
+      return changed ? next : prev;
+    });
   }, [regularNodes, setNodes]);
 
   const addChild = useCallback((parentId: string) => {
@@ -155,6 +189,7 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
     syncNodes((prev) => prev.filter((n) => !toDelete.has(n.id)));
     syncEdges((prev) => prev.filter((e) => !toDelete.has(e.source) && !toDelete.has(e.target)));
     setSelectedNodeId(null);
+    setDetailPanelOpen(false);
   }, [regularNodes, sourceEdges, centerNodeId, syncNodes, syncEdges]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -168,9 +203,38 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   }, [selectedNodeId, addChild, addSibling, deleteNode]);
 
   const onNodeClick = useCallback(
-    (_evt: React.MouseEvent, node: Node<LifeMapNodeData>) => setSelectedNodeId(node.id),
+    (_evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
+      setSelectedNodeId(node.id);
+      setDetailPanelOpen(true);
+    },
     []
   );
+
+  const closeDetailPanel = useCallback(() => setDetailPanelOpen(false), []);
+
+  // 빈 캔버스 클릭 시 패널 닫기
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+    setDetailPanelOpen(false);
+  }, []);
+
+  const { updateNodeData } = useReactFlow();
+
+  // 노드 데이터 업데이트: ReactFlow 내부 스토어 직접 갱신 + 원본 동기화
+  const handleUpdateNode = useCallback((nodeId: string, updates: Partial<LifeMapNodeData>) => {
+    const now = new Date().toISOString();
+    const merged = { ...updates, updatedAt: now };
+
+    // 1. ReactFlow 내부 스토어 직접 업데이트 (확실한 리렌더)
+    updateNodeData(nodeId, merged);
+
+    // 2. 원본(캔버스) 노드 업데이트 (자동저장 대상)
+    syncNodes((prev) =>
+      prev.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...merged } } : n
+      )
+    );
+  }, [updateNodeData, syncNodes]);
 
   const onNodeDoubleClick = useCallback(
     (evt: React.MouseEvent, node: Node<LifeMapNodeData>) => {
@@ -232,87 +296,100 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   }, [regularNodes, sourceEdges, centerNodeId, direction, collapsedIds, sideOverrides, setNodes, setEdges]);
 
   return (
-    <div className="h-full w-full" onKeyDown={onKeyDown} tabIndex={0}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeDragStop={onNodeDragStop}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultEdgeOptions={{ type: 'relationship' }}
-        fitView
-        minZoom={0.1}
-        maxZoom={3}
-        proOptions={{ hideAttribution: true }}
-        nodesDraggable={true}
-        deleteKeyCode={null}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
-        <Controls className="!bottom-4 !left-4" showInteractive={false} />
-        <MiniMap
-          className="!bottom-4 !right-4"
-          nodeColor={(n) => (n.data as LifeMapNodeData)?.color || '#CBD5E1'}
-          pannable
-          zoomable
-        />
+    <div className="flex h-full w-full">
+      <div className="relative h-full flex-1" onKeyDown={onKeyDown} tabIndex={0}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStop={onNodeDragStop}
+          onPaneClick={onPaneClick}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={{ type: 'relationship' }}
+          fitView
+          minZoom={0.1}
+          maxZoom={3}
+          proOptions={{ hideAttribution: true }}
+          nodesDraggable={true}
+          deleteKeyCode={null}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E5E7EB" />
+          <Controls className="!bottom-4 !left-4" showInteractive={false} />
+          <MiniMap
+            className="!bottom-4 !right-4"
+            nodeColor={(n) => (n.data as LifeMapNodeData)?.color || '#CBD5E1'}
+            pannable
+            zoomable
+          />
 
-        <Panel position="top-center">
-          <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg border border-gray-200 backdrop-blur-sm">
-            <span className="text-[10px] font-medium text-gray-400">레이아웃:</span>
-            {(['HORIZONTAL', 'LR', 'TB', 'RL'] as LayoutDirection[]).map((dir) => (
+          <Panel position="top-center">
+            <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg border border-gray-200 backdrop-blur-sm">
+              <span className="text-[10px] font-medium text-gray-400">레이아웃:</span>
+              {(['HORIZONTAL', 'LR', 'TB', 'RL'] as LayoutDirection[]).map((dir) => (
+                <button
+                  key={dir}
+                  onClick={() => setDirection(dir)}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[11px] font-medium transition-all',
+                    direction === dir
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  )}
+                >
+                  {{ HORIZONTAL: '좌←중→우', LR: '좌→우', TB: '위→아래', RL: '우→좌' }[dir]}
+                </button>
+              ))}
+
+              <div className="mx-1 h-4 w-px bg-gray-200" />
+
               <button
-                key={dir}
-                onClick={() => setDirection(dir)}
-                className={cn(
-                  'rounded-md px-2 py-1 text-[11px] font-medium transition-all',
-                  direction === dir
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-500 hover:bg-gray-100'
-                )}
+                onClick={autoLayout}
+                className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-200 transition-all"
               >
-                {{ HORIZONTAL: '좌←중→우', LR: '좌→우', TB: '위→아래', RL: '우→좌' }[dir]}
+                자동 정렬
               </button>
-            ))}
 
-            <div className="mx-1 h-4 w-px bg-gray-200" />
-
-            <button
-              onClick={autoLayout}
-              className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-200 transition-all"
-            >
-              자동 정렬
-            </button>
-
-            {collapsedIds.size > 0 && (
-              <button
-                onClick={() => setCollapsedIds(new Set())}
-                className="rounded-md px-2 py-1 text-[10px] font-medium text-orange-600 hover:bg-orange-50"
-              >
-                모두 펼치기
-              </button>
-            )}
-          </div>
-        </Panel>
-
-        <Panel position="top-left">
-          <div className="mt-2 ml-2 flex flex-col gap-1.5">
-            {centerNodeId && (
-              <div className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-700 border border-blue-200">
-                중심: {regularNodes.find((n) => n.id === centerNodeId)?.data.label || centerNodeId}
-              </div>
-            )}
-            <div className="rounded-lg bg-gray-50 px-3 py-1.5 text-[10px] text-gray-500 border border-gray-200 leading-relaxed">
-              <span className="font-semibold">Tab</span> 자식 추가 · <span className="font-semibold">Enter</span> 형제 추가 · <span className="font-semibold">Delete</span> 삭제
-              <br />
-              <span className="font-semibold">클릭</span> 선택 · <span className="font-semibold">더블클릭</span> 접기/펼치기 · <span className="font-semibold">드래그</span> 이동
+              {collapsedIds.size > 0 && (
+                <button
+                  onClick={() => setCollapsedIds(new Set())}
+                  className="rounded-md px-2 py-1 text-[10px] font-medium text-orange-600 hover:bg-orange-50"
+                >
+                  모두 펼치기
+                </button>
+              )}
             </div>
-          </div>
-        </Panel>
-      </ReactFlow>
+          </Panel>
+
+          <Panel position="top-left">
+            <div className="mt-2 ml-2 flex flex-col gap-1.5">
+              {centerNodeId && (
+                <div className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-700 border border-blue-200">
+                  중심: {regularNodes.find((n) => n.id === centerNodeId)?.data.label || centerNodeId}
+                </div>
+              )}
+              <div className="rounded-lg bg-gray-50 px-3 py-1.5 text-[10px] text-gray-500 border border-gray-200 leading-relaxed">
+                <span className="font-semibold">Tab</span> 자식 추가 · <span className="font-semibold">Enter</span> 형제 추가 · <span className="font-semibold">Delete</span> 삭제
+                <br />
+                <span className="font-semibold">클릭</span> 선택 · <span className="font-semibold">더블클릭</span> 접기/펼치기 · <span className="font-semibold">드래그</span> 이동
+              </div>
+            </div>
+          </Panel>
+        </ReactFlow>
+      </div>
+
+      {detailPanelOpen && selectedNodeId && (
+        <MindMapDetailPanel
+          selectedNodeId={selectedNodeId}
+          nodes={nodes}
+          edges={edges}
+          onClose={closeDetailPanel}
+          onUpdateNode={handleUpdateNode}
+        />
+      )}
     </div>
   );
 }
