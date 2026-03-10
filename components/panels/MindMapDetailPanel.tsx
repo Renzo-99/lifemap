@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { X, Star, Tag, Calendar } from 'lucide-react';
 import type { Node, Edge } from '@xyflow/react';
 import type { LifeMapNodeData, LifeMapEdgeData, NodeStatus } from '@/types';
@@ -13,45 +13,17 @@ const STATUS_OPTIONS: { value: NodeStatus; label: string; color: string }[] = [
   { value: 'none', label: '미분류', color: 'bg-gray-100 text-gray-500 border-gray-200' },
 ];
 
-// 메모 입력: 로컬 상태 + blur 시 반영
-function MemoInput({ memo, onCommit }: { memo: string; onCommit: (val: string) => void }) {
-  const [value, setValue] = useState(memo);
-
-  useEffect(() => {
-    setValue(memo);
-  }, [memo]);
-
-  return (
-    <div className="border-b border-[#F2F4F6] px-4 py-3">
-      <div className="mb-2 text-xs font-medium text-[#8B95A1]">메모</div>
-      <textarea
-        className="w-full resize-none rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] p-3 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
-        rows={5}
-        placeholder="메모를 입력하세요..."
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => { if (value !== memo) onCommit(value); }}
-      />
-    </div>
-  );
-}
-
-// 로컬 상태로 입력을 관리하고 blur/Enter 시에만 부모에 반영
+// 비제어 입력: defaultValue + ref로 한국어 IME 조합 깨짐 방지
+// key={selectedNodeId}로 노드 전환 시 자동 리마운트
 function NameInput({ label, onCommit }: { label: string; onCommit: (val: string) => void }) {
-  const [value, setValue] = useState(label);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 외부에서 label이 바뀌면 (다른 노드 선택 등) 동기화
-  useEffect(() => {
-    setValue(label);
-  }, [label]);
-
   const commit = () => {
-    const trimmed = value.trim();
-    if (trimmed && trimmed !== label) {
-      onCommit(trimmed);
-    } else {
-      setValue(label); // 빈 값이면 원래 값 복원
+    const val = inputRef.current?.value.trim() || '';
+    if (val && val !== label) {
+      onCommit(val);
+    } else if (inputRef.current) {
+      inputRef.current.value = label;
     }
   };
 
@@ -61,14 +33,35 @@ function NameInput({ label, onCommit }: { label: string; onCommit: (val: string)
       <input
         ref={inputRef}
         className="w-full rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] px-2.5 py-1.5 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+        defaultValue={label}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
             inputRef.current?.blur();
           }
+        }}
+      />
+    </div>
+  );
+}
+
+// 메모 입력: 비제어 textarea + blur 시 반영
+function MemoInput({ memo, onCommit }: { memo: string; onCommit: (val: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  return (
+    <div className="border-b border-[#F2F4F6] px-4 py-3">
+      <div className="mb-2 text-xs font-medium text-[#8B95A1]">메모</div>
+      <textarea
+        ref={textareaRef}
+        className="w-full resize-none rounded-xl border border-[#E5E8EB] bg-[#F9FAFB] p-3 text-sm text-[#333D4B] outline-none transition-all focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#3182F6]/10"
+        rows={5}
+        placeholder="메모를 입력하세요..."
+        defaultValue={memo}
+        onBlur={() => {
+          const val = textareaRef.current?.value || '';
+          if (val !== memo) onCommit(val);
         }}
       />
     </div>
@@ -189,7 +182,7 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
         </div>
 
         {/* 이름 수정 */}
-        <NameInput label={data.label} onCommit={(val) => update({ label: val })} />
+        <NameInput key={`name-${selectedNodeId}`} label={data.label} onCommit={(val) => update({ label: val })} />
 
         {/* 태그 */}
         <div className="border-b border-[#F2F4F6] px-4 py-3">
@@ -225,7 +218,7 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
         </div>
 
         {/* 메모 */}
-        <MemoInput memo={data.memo} onCommit={(val) => update({ memo: val })} />
+        <MemoInput key={`memo-${selectedNodeId}`} memo={data.memo} onCommit={(val) => update({ memo: val })} />
 
         {/* 연결 노드 */}
         {connectedNodes.length > 0 && (
