@@ -60,9 +60,9 @@ function MindMapViewInner({ sourceNodes, sourceEdges, onNodesChange: syncNodes, 
   const [sideOverrides, setSideOverrides] = useState<Map<string, 'left' | 'right'>>(new Map());
 
   // 레이아웃 재계산을 트리거하는 구조적 변경 추적용
-  // (노드 추가/삭제/구조 변경만 레이아웃 재실행, 데이터 수정은 제외)
+  // 노드 추가/삭제/구조 변경 + 상태 변경 시 레이아웃 재실행 (상태별 정렬 반영)
   const structureKey = useMemo(() => {
-    const nodeIds = regularNodes.map((n) => n.id).sort().join(',');
+    const nodeIds = regularNodes.map((n) => `${n.id}:${n.data.status || ''}`).sort().join(',');
     const edgeIds = sourceEdges.map((e) => `${e.source}-${e.target}`).sort().join(',');
     return `${nodeIds}|${edgeIds}`;
   }, [regularNodes, sourceEdges]);
