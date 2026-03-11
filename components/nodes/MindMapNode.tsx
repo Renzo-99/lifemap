@@ -12,7 +12,7 @@ const HANDLE_HIDDEN = '!w-1 !h-1 !bg-transparent !border-transparent !min-w-0 !m
 
 const STATUS_BADGE: Record<NodeStatus, { label: string; bg: string; text: string } | null> = {
   none: null,
-  active: null,
+  active: { label: '진행중', bg: 'bg-blue-100', text: 'text-blue-600' },
   done: { label: '완료', bg: 'bg-green-100', text: 'text-green-600' },
   hold: { label: '보류', bg: 'bg-amber-100', text: 'text-amber-600' },
 };

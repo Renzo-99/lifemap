@@ -2,6 +2,14 @@ import dagre from 'dagre';
 import type { Node, Edge } from '@xyflow/react';
 import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 
+// 상태별 정렬 우선순위 (상단→하단)
+const STATUS_SORT_ORDER: Record<string, number> = {
+  active: 0,  // 진행중 → 맨 위
+  none: 1,    // 상태 없음
+  hold: 2,    // 보류
+  done: 3,    // 완료 → 맨 아래
+};
+
 export const BRANCH_COLORS = [
   '#3182F6', '#8B5CF6', '#10B981', '#F97316', '#EF4444',
   '#EC4899', '#06B6D4', '#84CC16', '#F59E0B', '#6366F1',
@@ -189,6 +197,62 @@ function runDagre(
   return positions;
 }
 
+// 상태별 자식 노드 재정렬 (같은 부모 아래에서 상태 그룹핑)
+function reorderChildrenByStatus(
+  nodes: Node<LifeMapNodeData>[],
+  childrenMap: Map<string, string[]>,
+  isHorizontal: boolean,
+): Node<LifeMapNodeData>[] {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const axis: 'y' | 'x' = isHorizontal ? 'y' : 'x';
+
+  // 노드의 모든 자손 ID 수집
+  function getDescendantIds(id: string): string[] {
+    const result: string[] = [];
+    for (const c of childrenMap.get(id) || []) {
+      if (nodeMap.has(c)) {
+        result.push(c);
+        result.push(...getDescendantIds(c));
+      }
+    }
+    return result;
+  }
+
+  for (const [, children] of childrenMap) {
+    const valid = children.filter((id) => nodeMap.has(id));
+    if (valid.length < 2) continue;
+
+    // 현재 위치 기준 슬롯 수집
+    const currentOrder = [...valid].sort(
+      (a, b) => nodeMap.get(a)!.position[axis] - nodeMap.get(b)!.position[axis],
+    );
+    const slots = currentOrder.map((id) => nodeMap.get(id)!.position[axis]);
+
+    // 상태 우선순위로 정렬 (같은 상태는 기존 순서 유지)
+    const statusOrder = [...valid].sort((a, b) => {
+      const sa = STATUS_SORT_ORDER[(nodeMap.get(a)!.data as any).status || 'none'] ?? 1;
+      const sb = STATUS_SORT_ORDER[(nodeMap.get(b)!.data as any).status || 'none'] ?? 1;
+      if (sa !== sb) return sa - sb;
+      return nodeMap.get(a)!.position[axis] - nodeMap.get(b)!.position[axis];
+    });
+
+    // 슬롯 재배치: 각 노드와 서브트리 전체를 이동
+    statusOrder.forEach((id, i) => {
+      const node = nodeMap.get(id)!;
+      const delta = slots[i] - node.position[axis];
+      if (Math.abs(delta) < 0.5) return;
+
+      const toShift = [id, ...getDescendantIds(id)];
+      for (const sid of toShift) {
+        const n = nodeMap.get(sid);
+        if (n) n.position = { ...n.position, [axis]: n.position[axis] + delta };
+      }
+    });
+  }
+
+  return nodes;
+}
+
 export type LayoutDirection = 'LR' | 'TB' | 'RL' | 'HORIZONTAL';
 
 export function getLayoutedElements(
@@ -250,6 +314,9 @@ export function getLayoutedElements(
       } as LifeMapNodeData,
     };
   });
+
+  // 상태별 자식 노드 재정렬
+  reorderChildrenByStatus(layoutedNodes, childrenMap, direction !== 'TB');
 
   const layoutedEdges: Edge<LifeMapEdgeData>[] = visibleEdges.map((edge) => ({
     ...edge,
@@ -357,6 +424,9 @@ function layoutBidirectional(
       } as LifeMapNodeData,
     };
   });
+
+  // 상태별 자식 노드 재정렬
+  reorderChildrenByStatus(layoutedNodes, childrenMap, true);
 
   const layoutedEdges: Edge<LifeMapEdgeData>[] = visibleEdges.map((edge) => {
     const isLeft = sideMap.get(edge.target) === 'left';
