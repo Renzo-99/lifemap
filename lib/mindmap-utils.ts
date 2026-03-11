@@ -92,11 +92,21 @@ export function buildTree(
   return { depthMap, parentMap, childrenMap, directedEdges };
 }
 
-// 노드 크기 계산
-function getNodeSize(depth: number, label: string) {
-  const labelLen = label?.length || 4;
+// 노드 크기 계산 (배지, 별점, 상태 등 실제 렌더링 크기 반영)
+function getNodeSize(depth: number, node: Node<LifeMapNodeData>) {
+  const label = node.data.label || '';
+  const labelLen = label.length || 4;
+  const importance = node.data.importance || 0;
+  const status = node.data.status || 'none';
+
   const baseW = depth === 0 ? 160 : depth === 1 ? 140 : 120;
-  const w = Math.max(baseW, labelLen * 14 + 60);
+  let w = Math.max(baseW, labelLen * 14 + 60);
+
+  // 별점 공간
+  if (importance > 0) w += importance * 11 + 8;
+  // 상태 배지 공간
+  if (status !== 'none') w += 48;
+
   const h = depth === 0 ? 50 : depth === 1 ? 44 : 36;
   return { w, h };
 }
@@ -161,7 +171,7 @@ function computeMaxWidthPerDepth(
   const maxWidthPerDepth = new Map<number, number>();
   nodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const { w } = getNodeSize(depth, node.data.label);
+    const { w } = getNodeSize(depth, node);
     maxWidthPerDepth.set(depth, Math.max(maxWidthPerDepth.get(depth) || 0, w));
   });
   return maxWidthPerDepth;
@@ -176,15 +186,15 @@ function runDagre(
 ): Map<string, { x: number; y: number; width: number; height: number }> {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 160, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: direction, nodesep: 60, ranksep: 160, marginx: 40, marginy: 40 });
 
   // 같은 깊이의 노드는 동일 폭을 사용하여 핸들 위치 정렬
   const maxWidthPerDepth = computeMaxWidthPerDepth(nodes, depthMap);
 
   nodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const { h } = getNodeSize(depth, node.data.label);
-    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node.data.label).w;
+    const { h } = getNodeSize(depth, node);
+    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node).w;
     g.setNode(node.id, { width: w, height: h });
   });
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
@@ -198,11 +208,13 @@ function runDagre(
   return positions;
 }
 
-// 상태별 자식 노드 재정렬 (같은 부모 아래에서 상태 그룹핑)
+// 상태별 자식 노드 재정렬 (서브트리 높이를 고려하여 겹침 방지)
 function reorderChildrenByStatus(
   nodes: Node<LifeMapNodeData>[],
   childrenMap: Map<string, string[]>,
+  depthMap: Map<string, number>,
   isHorizontal: boolean,
+  gap: number = 20,
 ): Node<LifeMapNodeData>[] {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const axis: 'y' | 'x' = isHorizontal ? 'y' : 'x';
@@ -219,36 +231,61 @@ function reorderChildrenByStatus(
     return result;
   }
 
+  // 서브트리의 축 방향 범위 계산 (min, max)
+  function getSubtreeExtent(id: string): { min: number; max: number } {
+    const allIds = [id, ...getDescendantIds(id)];
+    let min = Infinity, max = -Infinity;
+    for (const nid of allIds) {
+      const n = nodeMap.get(nid);
+      if (!n) continue;
+      const pos = n.position[axis];
+      const depth = depthMap.get(nid) || 0;
+      const size = getNodeSize(depth, n);
+      const h = isHorizontal ? size.h : size.w;
+      min = Math.min(min, pos);
+      max = Math.max(max, pos + h);
+    }
+    return { min, max };
+  }
+
   for (const [, children] of childrenMap) {
     const valid = children.filter((id) => nodeMap.has(id));
     if (valid.length < 2) continue;
 
-    // 현재 위치 기준 슬롯 수집
-    const currentOrder = [...valid].sort(
-      (a, b) => nodeMap.get(a)!.position[axis] - nodeMap.get(b)!.position[axis],
-    );
-    const slots = currentOrder.map((id) => nodeMap.get(id)!.position[axis]);
-
     // 상태 우선순위로 정렬 (같은 상태는 기존 순서 유지)
-    const statusOrder = [...valid].sort((a, b) => {
+    const sorted = [...valid].sort((a, b) => {
       const sa = STATUS_SORT_ORDER[(nodeMap.get(a)!.data as any).status || 'none'] ?? 1;
       const sb = STATUS_SORT_ORDER[(nodeMap.get(b)!.data as any).status || 'none'] ?? 1;
       if (sa !== sb) return sa - sb;
       return nodeMap.get(a)!.position[axis] - nodeMap.get(b)!.position[axis];
     });
 
-    // 슬롯 재배치: 각 노드와 서브트리 전체를 이동
-    statusOrder.forEach((id, i) => {
-      const node = nodeMap.get(id)!;
-      const delta = slots[i] - node.position[axis];
-      if (Math.abs(delta) < 0.5) return;
-
-      const toShift = [id, ...getDescendantIds(id)];
-      for (const sid of toShift) {
-        const n = nodeMap.get(sid);
-        if (n) n.position = { ...n.position, [axis]: n.position[axis] + delta };
-      }
+    // 각 서브트리의 크기(높이) 계산
+    const subtreeExtents = sorted.map((id) => {
+      const ext = getSubtreeExtent(id);
+      return { id, size: ext.max - ext.min, offset: nodeMap.get(id)!.position[axis] - ext.min };
     });
+
+    // 전체 블록의 시작점 = 현재 모든 서브트리의 가장 작은 min
+    const allExtents = valid.map((id) => getSubtreeExtent(id));
+    const blockStart = Math.min(...allExtents.map((e) => e.min));
+
+    // 순차 배치: 각 서브트리를 겹치지 않게 배치
+    let cursor = blockStart;
+    for (const { id, size, offset } of subtreeExtents) {
+      const newPos = cursor + offset;
+      const node = nodeMap.get(id)!;
+      const delta = newPos - node.position[axis];
+
+      if (Math.abs(delta) > 0.5) {
+        const toShift = [id, ...getDescendantIds(id)];
+        for (const sid of toShift) {
+          const n = nodeMap.get(sid);
+          if (n) n.position = { ...n.position, [axis]: n.position[axis] + delta };
+        }
+      }
+      cursor += size + gap;
+    }
   }
 
   return nodes;
@@ -283,15 +320,15 @@ export function getLayoutedElements(
   // 단방향 레이아웃
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 160, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: direction, nodesep: 60, ranksep: 160, marginx: 40, marginy: 40 });
 
   // 같은 깊이의 노드는 동일 폭으로 정렬
   const maxWidthPerDepth = computeMaxWidthPerDepth(visibleNodes, depthMap);
 
   visibleNodes.forEach((node) => {
     const depth = depthMap.get(node.id) || 0;
-    const { h } = getNodeSize(depth, node.data.label);
-    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node.data.label).w;
+    const { h } = getNodeSize(depth, node);
+    const w = maxWidthPerDepth.get(depth) || getNodeSize(depth, node).w;
     g.setNode(node.id, { width: w, height: h });
   });
   visibleEdges.forEach((edge) => g.setEdge(edge.source, edge.target));
@@ -317,7 +354,7 @@ export function getLayoutedElements(
   });
 
   // 상태별 자식 노드 재정렬
-  reorderChildrenByStatus(layoutedNodes, childrenMap, direction !== 'TB');
+  reorderChildrenByStatus(layoutedNodes, childrenMap, depthMap, direction !== 'TB');
 
   const layoutedEdges: Edge<LifeMapEdgeData>[] = visibleEdges.map((edge) => ({
     ...edge,
@@ -367,7 +404,7 @@ function layoutBidirectional(
   leftIds.forEach((id) => sideMap.set(id, 'left'));
 
   const centerNode = visibleNodes.find((n) => n.id === centerId)!;
-  const centerSize = getNodeSize(depthMap.get(centerId) || 0, centerNode.data.label);
+  const centerSize = getNodeSize(depthMap.get(centerId) || 0, centerNode);
 
   // 오른쪽 서브트리 (LR)
   const rightNodes = visibleNodes.filter((n) => n.id === centerId || rightIds.has(n.id));
@@ -427,7 +464,7 @@ function layoutBidirectional(
   });
 
   // 상태별 자식 노드 재정렬
-  reorderChildrenByStatus(layoutedNodes, childrenMap, true);
+  reorderChildrenByStatus(layoutedNodes, childrenMap, depthMap, true);
 
   const layoutedEdges: Edge<LifeMapEdgeData>[] = visibleEdges.map((edge) => {
     const isLeft = sideMap.get(edge.target) === 'left';
