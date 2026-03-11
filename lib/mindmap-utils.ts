@@ -4,10 +4,11 @@ import type { LifeMapNodeData, LifeMapEdgeData } from '@/types';
 
 // 상태별 정렬 우선순위 (상단→하단)
 const STATUS_SORT_ORDER: Record<string, number> = {
-  active: 0,  // 진행중 → 맨 위
-  none: 1,    // 상태 없음
-  hold: 2,    // 보류
-  done: 3,    // 완료 → 맨 아래
+  active: 0,    // 진행중 → 맨 위
+  none: 1,      // 상태 없음
+  hold: 2,      // 보류
+  done: 3,      // 완료
+  excluded: 4,  // 제외 → 맨 아래
 };
 
 export const BRANCH_COLORS = [

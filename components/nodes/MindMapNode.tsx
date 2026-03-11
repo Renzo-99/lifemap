@@ -15,6 +15,7 @@ const STATUS_BADGE: Record<NodeStatus, { label: string; bg: string; text: string
   active: { label: '진행중', bg: 'bg-blue-100', text: 'text-blue-600' },
   done: { label: '완료', bg: 'bg-green-100', text: 'text-green-600' },
   hold: { label: '보류', bg: 'bg-amber-100', text: 'text-amber-600' },
+  excluded: { label: '제외', bg: 'bg-red-100', text: 'text-red-600' },
 };
 
 function StarRating({ count, size = 'sm' }: { count: number; size?: 'sm' | 'xs' }) {
@@ -43,6 +44,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
   const status: NodeStatus = data.status || 'none';
   const isDone = status === 'done';
   const isHold = status === 'hold';
+  const isExcluded = status === 'excluded';
   const badge = STATUS_BADGE[status];
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -137,7 +139,8 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
           isLeft && 'flex-row-reverse',
           isDone && 'opacity-60',
           isHold && 'opacity-75 border-dashed',
-          selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+          isExcluded && 'opacity-50 border-red-300 bg-red-50/50',
+          selected ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : !isExcluded && 'border-gray-200 hover:border-gray-300'
         )}
         onDoubleClick={handleDoubleClick}
       >
@@ -151,6 +154,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
             'text-sm font-semibold text-gray-800 whitespace-nowrap',
             isLeft && 'text-right',
             isDone && 'line-through text-gray-400',
+            isExcluded && 'line-through text-red-400',
           )}>
             {data.label}
           </span>
@@ -171,7 +175,8 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
         isLeft && 'flex-row-reverse',
         isDone && 'opacity-60',
         isHold && 'opacity-75 border-dashed',
-        selected ? 'border-blue-400 shadow-sm ring-1 ring-blue-200' : 'border-gray-150 hover:border-gray-300'
+        isExcluded && 'opacity-50 border-red-300 bg-red-50/50',
+        selected ? 'border-blue-400 shadow-sm ring-1 ring-blue-200' : !isExcluded && 'border-gray-150 hover:border-gray-300'
       )}
       onDoubleClick={handleDoubleClick}
     >
@@ -183,6 +188,7 @@ function MindMapNodeComponent({ id, data, selected }: NodeProps<MindMapNodeType>
           'text-xs text-gray-700 whitespace-nowrap',
           isLeft && 'text-right',
           isDone && 'line-through text-gray-400',
+          isExcluded && 'line-through text-red-400',
         )}>
           {data.label}
         </span>

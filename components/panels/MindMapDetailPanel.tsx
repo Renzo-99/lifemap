@@ -10,6 +10,7 @@ const STATUS_OPTIONS: { value: NodeStatus; label: string; color: string }[] = [
   { value: 'active', label: '진행중', color: 'bg-blue-100 text-blue-600 border-blue-200' },
   { value: 'done', label: '완료', color: 'bg-green-100 text-green-600 border-green-200' },
   { value: 'hold', label: '보류', color: 'bg-amber-100 text-amber-600 border-amber-200' },
+  { value: 'excluded', label: '제외', color: 'bg-red-100 text-red-600 border-red-200' },
   { value: 'none', label: '미분류', color: 'bg-gray-100 text-gray-500 border-gray-200' },
 ];
 
@@ -113,6 +114,7 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
           <span className={cn(
             'truncate text-sm font-semibold text-[#191F28]',
             status === 'done' && 'line-through text-gray-400',
+            status === 'excluded' && 'line-through text-red-400',
           )}>
             {data.label}
           </span>
@@ -178,6 +180,9 @@ export function MindMapDetailPanel({ selectedNodeId, nodes, edges, onClose, onUp
           )}
           {status === 'hold' && (
             <p className="mt-2 text-[11px] text-amber-500">보류 처리됨 — 마인드맵에서 점선 테두리로 표시됩니다</p>
+          )}
+          {status === 'excluded' && (
+            <p className="mt-2 text-[11px] text-red-500">제외 처리됨 — 빨간 삭선으로 표시됩니다</p>
           )}
         </div>
 

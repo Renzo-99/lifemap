@@ -5,7 +5,7 @@ export type NodeType = 'person' | 'organization' | 'activity' | 'goal';
 
 export type NodeShape = 'rounded-rect' | 'circle' | 'diamond' | 'hexagon';
 
-export type NodeStatus = 'active' | 'done' | 'hold' | 'none';
+export type NodeStatus = 'active' | 'done' | 'hold' | 'excluded' | 'none';
 
 export type MandalartLevel = 'core' | 'sub' | 'action';
 
